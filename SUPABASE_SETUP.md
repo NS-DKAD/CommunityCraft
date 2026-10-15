@@ -78,3 +78,22 @@ npm run dev
 Visit **http://localhost:3000**:
 - If Supabase is connected, the top banner will show a green confirmation: **Live Database Connected**.
 - If `.env.local` is missing or not configured, the website automatically stays in **Demo Data Mode** without crashing.
+
+---
+
+## 7. Moderation workflow for pending submissions
+
+There is currently no protected admin UI in the app itself. For development, the current moderation workflow is done directly in Supabase:
+
+1. Open the Supabase dashboard for the project.
+2. Go to **Table Editor** and select the `projects` table.
+3. Filter on `is_approved = false` to show submissions waiting for review.
+4. Review the row and choose the action in the database editor:
+   - set `is_approved = true` to publish it in the catalog,
+   - keep `false` to leave it pending,
+   - optionally reject it by leaving it hidden and documenting the reason outside the app.
+5. The public catalog reads only approved rows, so pending projects stay invisible until they are manually approved.
+
+This is the current minimal moderation path in development. It does not create a new admin interface or expose moderation rights to regular users.
+
+---

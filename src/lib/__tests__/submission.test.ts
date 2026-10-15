@@ -2,14 +2,25 @@ import {
   validateSubmissionInput,
   slugFromGitHubFullName,
 } from "@/lib/submission";
+import { getProjectBySlug } from "@/lib/projects";
+import { getSupabaseClient } from "@/lib/supabase/client";
+
+jest.mock("@/lib/supabase/client", () => ({
+  isSupabaseConfigured: jest.fn(() => true),
+  getSupabaseClient: jest.fn(),
+}));
 
 // ─── validateSubmissionInput ─────────────────────────────────────────────────
 
 describe("validateSubmissionInput", () => {
   const validBase = {
+    name: "My Awesome Mod",
+    goal: "Helps players build better worlds and share ideas.",
+    authorName: "Example Dev",
     githubUrl: "https://github.com/example/my-mod",
     description: "A very useful mod for ArtCraft that does cool things.",
     category: "Mods" as const,
+    status: "Proposed" as const,
     tags: ["voxels", "gameplay"],
   };
 
@@ -22,8 +33,23 @@ describe("validateSubmissionInput", () => {
     expect(r.repo).toBe("my-mod");
   });
 
-  test("rejects missing githubUrl", () => {
+  test("allows a missing githubUrl when no repo is provided", () => {
     const r = validateSubmissionInput({ ...validBase, githubUrl: "" });
+    expect(r.valid).toBe(true);
+    expect(r.errors.some((e) => e.field === "githubUrl")).toBe(false);
+  });
+
+  test("allows a project without a goal when it is optional", () => {
+    const r = validateSubmissionInput({ ...validBase, goal: "" });
+    expect(r.valid).toBe(true);
+    expect(r.errors.some((e) => e.field === "goal")).toBe(false);
+  });
+
+  test("rejects invalid GitHub URLs if one is provided", () => {
+    const r = validateSubmissionInput({
+      ...validBase,
+      githubUrl: "https://gitlab.com/example/repo",
+    });
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.field === "githubUrl")).toBe(true);
   });
@@ -107,12 +133,21 @@ describe("validateSubmissionInput", () => {
     expect(r.valid).toBe(true);
   });
 
+  test("requires an author name or pseudonym", () => {
+    const r = validateSubmissionInput({ ...validBase, authorName: "" });
+    expect(r.valid).toBe(false);
+    expect(r.errors.some((e) => e.field === "author_name")).toBe(true);
+  });
+
   test("collects all errors when multiple fields are invalid", () => {
     const r = validateSubmissionInput({
-      githubUrl: "",
+      name: "",
+      goal: "",
+      authorName: "",
+      githubUrl: "https://gitlab.com/example/repo",
       description: "short",
       category: undefined,
-      tags: [],
+      tags: ["Bad Tag", "long-value-".repeat(10)],
     });
     expect(r.valid).toBe(false);
     expect(r.errors.length).toBeGreaterThanOrEqual(3);
@@ -132,5 +167,58 @@ describe("slugFromGitHubFullName", () => {
 
   test("handles underscores and dots", () => {
     expect(slugFromGitHubFullName("user/my_cool.project")).toBe("user-my-cool-project");
+  });
+});
+
+describe("getProjectBySlug", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("queries by slug, not by UUID", async () => {
+    const maybeSingle = jest.fn().mockResolvedValue({
+      data: {
+        id: "11111111-1111-4111-8111-111111111111",
+        slug: "artcraft-studio-tools",
+        name: "ArtCraft Studio Tools",
+        author: "Studio Team",
+        description: "Description is long enough.",
+        category: "Tools",
+        tags: ["tools"],
+        githubUrl: null,
+        is_approved: true,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        stars: 12,
+        forks: 2,
+        open_issues: 0,
+        license: "MIT",
+        last_github_commit_at: null,
+        synced_at: "2026-01-01T00:00:00Z",
+        goal: null,
+        status: "Proposed",
+        source_type: null,
+        source_verified: null,
+        discussion_url: null,
+        website_url: null,
+      },
+      error: null,
+    });
+
+    const eqBySlug = jest.fn().mockReturnValue({ maybeSingle });
+    const eqApproved = jest.fn().mockReturnValue({ eq: eqBySlug });
+    const select = jest.fn().mockReturnValue({ eq: eqApproved });
+    const from = jest.fn().mockReturnValue({ select });
+
+    (getSupabaseClient as jest.Mock).mockReturnValue({ from });
+
+    const result = await getProjectBySlug("artcraft-studio-tools");
+
+    expect(result).not.toBeNull();
+    expect(from).toHaveBeenCalledWith("projects_with_stats");
+    expect(select).toHaveBeenCalledWith("*");
+    expect(eqApproved).toHaveBeenCalledWith("is_approved", true);
+    expect(eqBySlug).toHaveBeenCalledWith("slug", "artcraft-studio-tools");
+    expect(eqBySlug).not.toHaveBeenCalledWith("id", "artcraft-studio-tools");
   });
 });

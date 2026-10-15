@@ -20,8 +20,14 @@ export interface Database {
           description: string;
           category: ProjectCategory;
           tags: string[];
-          github_url: string;
+          github_url: string | null;
           is_approved: boolean;
+          goal: string | null;
+          status: string | null;
+          source_type: string | null;
+          source_verified: boolean | null;
+          discussion_url: string | null;
+          website_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -33,8 +39,14 @@ export interface Database {
           description: string;
           category: ProjectCategory;
           tags?: string[];
-          github_url: string;
+          github_url?: string | null;
           is_approved?: boolean;
+          goal?: string | null;
+          status?: string | null;
+          source_type?: string | null;
+          source_verified?: boolean | null;
+          discussion_url?: string | null;
+          website_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -46,8 +58,14 @@ export interface Database {
           description?: string;
           category?: ProjectCategory;
           tags?: string[];
-          github_url?: string;
+          github_url?: string | null;
           is_approved?: boolean;
+          goal?: string | null;
+          status?: string | null;
+          source_type?: string | null;
+          source_verified?: boolean | null;
+          discussion_url?: string | null;
+          website_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -94,6 +112,103 @@ export interface Database {
           }
         ];
       };
+      project_contribution_requests: {
+        Row: {
+          id: string;
+          project_id: string;
+          display_name: string;
+          contact_type: string;
+          contact: string;
+          skills: string;
+          contribution_type: string;
+          message: string | null;
+          status: string;
+          created_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          display_name: string;
+          contact_type: string;
+          contact: string;
+          skills: string;
+          contribution_type: string;
+          message?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          display_name?: string;
+          contact_type?: string;
+          contact?: string;
+          skills?: string;
+          contribution_type?: string;
+          message?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_contribution_requests_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      project_reports: {
+        Row: {
+          id: string;
+          project_id: string;
+          reporter_name: string | null;
+          reason: string;
+          details: string | null;
+          status: string;
+          created_at: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          reporter_name?: string | null;
+          reason: string;
+          details?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          reporter_name?: string | null;
+          reason?: string;
+          details?: string | null;
+          status?: string;
+          created_at?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_reports_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       projects_with_stats: {
@@ -105,7 +220,7 @@ export interface Database {
           description: string;
           category: ProjectCategory;
           tags: string[];
-          githubUrl: string;
+          githubUrl: string | null;
           is_approved: boolean;
           created_at: string;
           updated_at: string;
@@ -115,6 +230,12 @@ export interface Database {
           license: string;
           last_github_commit_at: string | null;
           synced_at: string;
+          goal: string | null;
+          status: string | null;
+          source_type: string | null;
+          source_verified: boolean | null;
+          discussion_url: string | null;
+          website_url: string | null;
         };
         Relationships: [];
       };
