@@ -1,0 +1,88 @@
+import { Project } from "@/types/project";
+
+export const DEMO_PROJECTS: Project[] = [
+  {
+    id: "artcraft-studio-tools",
+    name: "ArtCraft Studio Tools",
+    author: "artcraft-community",
+    description:
+      "A suite of CLI and GUI utilities to inspect, validate, and export 3D assets and textures compatible with the ArtCraft engine.",
+    category: "Tools",
+    tags: ["cli", "gui", "export", "3d", "pipeline"],
+    githubUrl: "https://github.com/example/artcraft-studio-tools",
+    stars: 142,
+    lastUpdated: "2026-09-18",
+    license: "MIT",
+    isDemo: true,
+  },
+  {
+    id: "voxel-enhanced-mod",
+    name: "Voxel Enhanced Mod",
+    author: "VoxelCrafter",
+    description:
+      "A community mod adding dynamic biomes, an advanced weather system, and enriched physical interactions.",
+    category: "Mods",
+    tags: ["biomes", "weather", "gameplay", "voxels"],
+    githubUrl: "https://github.com/example/voxel-enhanced-mod",
+    stars: 389,
+    lastUpdated: "2026-10-02",
+    license: "GPL-3.0",
+    isDemo: true,
+  },
+  {
+    id: "cel-shaded-artcraft",
+    name: "Cel-Shaded Lighting Pack",
+    author: "PixelForge",
+    description:
+      "Custom anime-style cel-shaded shader pack featuring adjustable outlines and dynamic ambient lighting.",
+    category: "Shaders",
+    tags: ["shaders", "cel-shading", "post-process", "glsl"],
+    githubUrl: "https://github.com/example/cel-shaded-artcraft",
+    stars: 215,
+    lastUpdated: "2026-08-30",
+    license: "Apache-2.0",
+    isDemo: true,
+  },
+  {
+    id: "artcraft-assets-pbr",
+    name: "PBR Materials & Foliage Pack",
+    author: "NatureArtLab",
+    description:
+      "Open collection of 2K PBR textures, optimized foliage models, and rock materials ready for procedural world generation.",
+    category: "Rendering & Assets",
+    tags: ["textures", "pbr", "foliage", "procedural"],
+    githubUrl: "https://github.com/example/artcraft-assets-pbr",
+    stars: 97,
+    lastUpdated: "2026-09-24",
+    license: "CC-BY-4.0",
+    isDemo: true,
+  },
+  {
+    id: "artcraft-network-lib",
+    name: "ArtCraft Network SDK",
+    author: "NetCraftTeam",
+    description:
+      "TypeScript and Node.js networking library to streamline multiplayer synchronization, room events, and packet serialization.",
+    category: "Libraries",
+    tags: ["multiplayer", "sdk", "networking", "typescript"],
+    githubUrl: "https://github.com/example/artcraft-network-lib",
+    stars: 76,
+    lastUpdated: "2026-10-10",
+    license: "MIT",
+    isDemo: true,
+  },
+  {
+    id: "blueprint-visual-script",
+    name: "Visual Blueprint Editor",
+    author: "CodelessDev",
+    description:
+      "Visual node-based script editor enabling creators to design quests and gameplay mechanics without coding.",
+    category: "Tools",
+    tags: ["visual-scripting", "nodes", "editor", "modding"],
+    githubUrl: "https://github.com/example/blueprint-visual-script",
+    stars: 184,
+    lastUpdated: "2026-10-12",
+    license: "MIT",
+    isDemo: true,
+  },
+];
