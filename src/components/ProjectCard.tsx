@@ -9,9 +9,13 @@ interface ProjectCardProps {
 const CATEGORY_COLORS: Record<string, string> = {
   Tools: "border-sky-500/25 bg-sky-500/8 text-sky-700",
   Mods: "border-violet-500/25 bg-violet-500/8 text-violet-700",
-  Shaders: "border-amber-500/25 bg-amber-500/8 text-amber-700",
+  Shaders: "border-cyan-500/25 bg-cyan-500/8 text-cyan-700",
   "Rendering & Assets": "border-emerald-500/25 bg-emerald-500/8 text-emerald-700",
-  Libraries: "border-cyan-500/25 bg-cyan-500/8 text-cyan-700",
+  Libraries: "border-fuchsia-500/25 bg-fuchsia-500/8 text-fuchsia-700",
+  Software: "border-sky-500/25 bg-sky-500/8 text-sky-700",
+  Website: "border-emerald-500/25 bg-emerald-500/8 text-emerald-700",
+  Plugin: "border-cyan-500/25 bg-cyan-500/8 text-cyan-700",
+  Games: "border-amber-500/25 bg-amber-500/8 text-amber-700",
 };
 
 export function ProjectCard({ project }: ProjectCardProps) {

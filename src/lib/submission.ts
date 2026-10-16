@@ -42,6 +42,10 @@ const VALID_CATEGORIES: ProjectCategory[] = [
   "Shaders",
   "Rendering & Assets",
   "Libraries",
+  "Software",
+  "Website",
+  "Plugin",
+  "Games",
 ];
 
 const GITHUB_URL_PATTERN =

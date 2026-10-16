@@ -1,50 +1,66 @@
 # CommunityCraft
 
-Open-source community directory dedicated to creations and projects related to **ArtCraft** (tools, mods, shaders, libraries, assets).
+Open-source community directory and collaboration hub for creations related to the **ArtCraft** ecosystem.
 
-> **Important Notice**: CommunityCraft is an independent project that indexes creations. Project files and source code remain hosted on their creators' repositories (primarily GitHub).
+CommunityCraft helps people discover projects, understand their status, and find collaborators. It indexes project information; project files and source code remain hosted by their creators, primarily on GitHub.
 
----
+> **Independence notice:** CommunityCraft is an independent project and must not imply official ArtCraft status without authorization. Official or verified labels are reserved for authorized moderators.
 
-## 🚀 Quick Start (Windows)
+## Quick start (Windows)
 
-### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (LTS version recommended)
-- [Git for Windows](https://git-scm.com/)
+### Prerequisites
+- Node.js (LTS recommended)
+- Git for Windows
 
-### 2. Run the Development Server
-Open a PowerShell terminal in this directory and run:
+### Start the development server
+Open PowerShell in the project directory and run:
 
 ```bash
+npm install
 npm run dev
 ```
 
-Then open your browser at:
-👉 **[http://localhost:3000](http://localhost:3000)**
+Open http://localhost:3000.
 
----
+## Verification
 
-## 🛠️ Verification Commands
+Run the checks relevant to your change:
 
-- **TypeScript Type Check**:
-  ```bash
-  npx tsc --noEmit
-  ```
-- **Linting Check (ESLint)**:
-  ```bash
-  npm run lint
-  ```
-- **Production Build**:
-  ```bash
-  npm run build
-  ```
+```bash
+npx tsc --noEmit
+npm run lint
+npm test -- --runInBand
+npm run build
+```
 
----
+Use the test command only if the test script is available in the current checkout. Do not report a check as successful unless its command completed successfully.
 
-## 📁 Project Architecture
+## Database and migrations
 
-- `src/app/` : Next.js App Router pages, layout, and global styles.
-- `src/components/` : UI components (Header, Footer, ProjectCatalog, ProjectCard).
-- `src/data/` : Typed initial demo dataset.
-- `src/types/` : TypeScript type definitions.
-- `PROJECT_CONTEXT.md` : Project context, technical stack, and roadmap tracking.
+The application uses Supabase/PostgreSQL. SQL migrations are stored in `supabase/migrations/`.
+
+The migration `20261015_normalize_tags_and_categories.sql` introduces normalized `tags`, `tag_aliases`, and `project_tags` tables and backfills them from the existing `projects.tags` data. It is designed to preserve the legacy column for compatibility.
+
+**Important:** creating a migration file does not apply it to the remote Supabase project. Apply it using the project's established migration workflow, then verify the tables and row counts before relying on the new schema. Until application reads and writes are switched to `project_tags`, the old `projects.tags` column remains part of the compatibility path.
+
+Never commit `.env.local` or other secrets. Service-role keys must remain server-side.
+
+## Project architecture
+
+- `src/app/` — Next.js App Router pages and API routes.
+- `src/components/` — UI components, including the project catalog and cards.
+- `src/lib/` — data access, validation, and shared server/client utilities.
+- `src/types/` — TypeScript types.
+- `supabase/migrations/` — database migrations.
+- `supabase/seed.sql` — seed data.
+- `AGENTS.md` — persistent instructions for the coding agent.
+- `PROJECT_CONTEXT.md` — current project state and prioritized roadmap.
+
+## Product principles
+
+- Project source code stays with its creators; CommunityCraft stores directory metadata.
+- Public browsing should work without an account.
+- Submissions and collaboration requests must be validated server-side and protected against abuse.
+- Public project information and contact details must be handled carefully.
+- Project approval does not guarantee that a repository is safe.
+- Keep the interface accessible, responsive, and dark-theme-first.

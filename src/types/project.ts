@@ -1,9 +1,16 @@
-export type ProjectCategory =
-  | "Tools"
-  | "Mods"
-  | "Shaders"
-  | "Rendering & Assets"
-  | "Libraries";
+export const PROJECT_CATEGORIES = [
+  "Tools",
+  "Mods",
+  "Shaders",
+  "Rendering & Assets",
+  "Libraries",
+  "Software",
+  "Website",
+  "Plugin",
+  "Games",
+] as const;
+
+export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
 
 export type ProjectStatus =
   | "Proposed"

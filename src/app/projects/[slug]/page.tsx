@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { ProjectDetailClient } from "@/components/ProjectDetailClient";
+import { ProjectDetailClient } from "../../../components/ProjectDetailClient";
 import { getProjectBySlug, getSimilarProjects } from "@/lib/projects";
 
 export const instant = false;

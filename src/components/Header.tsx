@@ -1,5 +1,7 @@
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
+import CommunityCraftLogo from "../../assets/CommunityCraft-Logo.png";
 
 export function Header() {
   return (
@@ -10,8 +12,14 @@ export function Header() {
           className="flex min-w-0 items-center gap-3"
           aria-label="CommunityCraft homepage"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-lg font-black text-[var(--text)] shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-            C
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
+            <Image
+              src={CommunityCraftLogo}
+              alt="CommunityCraft logo"
+              width={40}
+              height={40}
+              className="h-full w-full object-cover"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">

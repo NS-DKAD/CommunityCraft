@@ -1,12 +1,19 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { ProjectCategory } from "@/types/project";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { getSupabaseClient } from "@/lib/supabase/client";
 
 type FieldErrors = Record<string, string | undefined>;
+
+type TagSuggestion = {
+  value: string;
+  canonical: string;
+  displayLabel: string;
+};
 
 interface SubmitResult {
   ok: boolean;
@@ -16,11 +23,34 @@ interface SubmitResult {
 }
 
 const CATEGORIES: ProjectCategory[] = [
-  "Tools",
+  "Software",
+  "Website",
+  "Plugin",
+  "Games",
   "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
+];
+
+const DEFAULT_TAG_SUGGESTIONS = [
+  "rendering",
+  "textures",
+  "shaders",
+  "lighting",
+  "modding",
+  "voxels",
+  "multiplayer",
+  "networking",
+  "nodes",
+  "automation",
+  "weather",
+  "biomes",
+  "materials",
+  "foliage",
+  "entities",
+  "editor",
+  "tools",
+  "performance",
+  "procedural",
+  "ui",
 ];
 
 const INITIAL_STATE = {
@@ -33,14 +63,149 @@ const INITIAL_STATE = {
   description: "",
   category: "" as ProjectCategory | "",
   status: "Proposed",
-  tags: "",
 };
+
+function normalizeTagToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]+/g, "")
+    .replace(/^-+|-+$/g, "");
+}
+
+function dedupeTags(values: string[]): string[] {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeTagToken(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    clean.push(normalized);
+  }
+
+  return clean;
+}
 
 export default function SubmitPage() {
   const [form, setForm] = useState(INITIAL_STATE);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
+  const tagInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadSuggestions() {
+      try {
+        const supabase = getSupabaseClient();
+
+        if (!supabase) {
+          if (!isCancelled) {
+            setTagSuggestions(
+              DEFAULT_TAG_SUGGESTIONS.map((tag) => ({
+                value: tag,
+                canonical: tag,
+                displayLabel: tag,
+              }))
+            );
+          }
+          return;
+        }
+
+        const [{ data: tagRows }, { data: aliasRows }] = await Promise.all([
+          supabase.from("tags").select("name, slug").eq("is_active", true).limit(200),
+          supabase.from("tag_aliases").select("alias, tag_id").limit(200),
+        ]);
+
+        const canonicalNames = (tagRows ?? []).map((row) => String(row.name ?? "").trim());
+        const aliasMap = new Map<string, string>();
+
+        for (const row of aliasRows ?? []) {
+          const alias = String(row.alias ?? "").trim();
+          const tagId = typeof row.tag_id === "string" ? row.tag_id : String(row.tag_id ?? "");
+          if (!alias || !tagId) continue;
+
+          aliasMap.set(normalizeTagToken(alias), alias);
+        }
+
+        const known = new Map<string, string>();
+        for (const tag of canonicalNames) {
+          const normalized = normalizeTagToken(tag);
+          if (normalized) {
+            known.set(normalized, normalized);
+          }
+        }
+
+        for (const [alias, rawAlias] of aliasMap.entries()) {
+          if (!known.has(alias)) {
+            known.set(alias, normalizeTagToken(rawAlias));
+          }
+        }
+
+        const mergedSuggestions = Array.from(known.keys())
+          .map((tag) => ({
+            value: tag,
+            canonical: tag,
+            displayLabel: tag,
+          }))
+          .sort((a, b) => a.value.localeCompare(b.value));
+
+        if (!isCancelled) {
+          setTagSuggestions(mergedSuggestions.length > 0 ? mergedSuggestions : DEFAULT_TAG_SUGGESTIONS.map((tag) => ({ value: tag, canonical: tag, displayLabel: tag })));
+        }
+      } catch {
+        if (!isCancelled) {
+          setTagSuggestions(
+            DEFAULT_TAG_SUGGESTIONS.map((tag) => ({
+              value: tag,
+              canonical: tag,
+              displayLabel: tag,
+            }))
+          );
+        }
+      }
+    }
+
+    void loadSuggestions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const filteredTagSuggestions = useMemo(() => {
+    const query = normalizeTagToken(tagInput);
+    const source = tagSuggestions.filter((suggestion) => {
+      const normalizedValue = normalizeTagToken(suggestion.value);
+      const normalizedCanonical = normalizeTagToken(suggestion.canonical);
+
+      if (!normalizedValue && !normalizedCanonical) {
+        return false;
+      }
+
+      if (!query) {
+        return !selectedTags.includes(normalizedValue || suggestion.canonical);
+      }
+
+      return (
+        !selectedTags.includes(normalizedValue || suggestion.canonical) &&
+        (normalizedValue.includes(query) ||
+          normalizedCanonical.includes(query) ||
+          suggestion.displayLabel.toLowerCase().includes(query))
+      );
+    });
+
+    return source.slice(0, 8);
+  }, [selectedTags, tagInput, tagSuggestions]);
 
   function handleChange(
     e: React.ChangeEvent<
@@ -51,13 +216,55 @@ export default function SubmitPage() {
     setFieldErrors((prev) => ({ ...prev, [e.target.name]: undefined }));
   }
 
+  function addSelectedTag(tagName: string) {
+    const canonical = normalizeTagToken(tagName);
+    if (!canonical) {
+      return;
+    }
+
+    setSelectedTags((prev) => dedupeTags([...prev, canonical]));
+    setTagInput("");
+    setActiveTagIndex(0);
+    tagInputRef.current?.focus();
+  }
+
+  function handleTagKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!filteredTagSuggestions.length) {
+      if (event.key === "Enter" && normalizeTagToken(tagInput)) {
+        event.preventDefault();
+        addSelectedTag(tagInput);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveTagIndex((prev) => (prev + 1) % filteredTagSuggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveTagIndex((prev) => (prev - 1 + filteredTagSuggestions.length) % filteredTagSuggestions.length);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addSelectedTag(filteredTagSuggestions[activeTagIndex]?.value ?? tagInput);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setTagInput("");
+      setActiveTagIndex(0);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const tags = form.tags
-      .split(",")
-      .map((t) => t.trim().toLowerCase())
-      .filter((t) => t.length > 0);
+    const tags = dedupeTags(selectedTags);
 
     startTransition(async () => {
       setFieldErrors({});
@@ -97,6 +304,8 @@ export default function SubmitPage() {
             name: json.name,
           });
           setForm(INITIAL_STATE);
+          setSelectedTags([]);
+          setTagInput("");
         } else if (res.status === 422 && json.fieldErrors) {
           const errors: FieldErrors = {};
           for (const fe of json.fieldErrors) {
@@ -487,33 +696,90 @@ export default function SubmitPage() {
 
                 <div>
                   <label
-                    htmlFor="tags"
+                    htmlFor="tag-search"
                     className="block text-sm font-medium text-[var(--text-soft)]"
                   >
-                    Tags{" "}
-                    <span className="text-xs font-normal text-[var(--text-muted)]">(optional)</span>
+                    Tags <span className="text-xs font-normal text-[var(--text-muted)]">(optional)</span>
                   </label>
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                    Comma-separated, lowercase, no spaces. Up to 10 tags.{" "}
-                    <span className="text-zinc-400">
-                      e.g. shaders, post-process, glsl
-                    </span>
+                    Choose from existing canonical tags and known aliases. Up to 10 tags.
                   </p>
-                  <input
-                    id="tags"
-                    name="tags"
-                    type="text"
-                    value={form.tags}
-                    onChange={handleChange}
-                    placeholder="modding, cli, voxels, open-source"
-                    aria-describedby={fieldErrors.tags ? "tags-error" : undefined}
-                    aria-invalid={!!fieldErrors.tags}
-                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
-                      fieldErrors.tags
-                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
-                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
-                    }`}
-                  />
+
+                  <div className="mt-2 relative">
+                    <input
+                      id="tag-search"
+                      ref={tagInputRef}
+                      type="text"
+                      value={tagInput}
+                      onChange={(event) => {
+                        setTagInput(event.target.value);
+                        setActiveTagIndex(0);
+                      }}
+                      onKeyDown={handleTagKeyDown}
+                      placeholder="Search tags like shaders, weather, nodes…"
+                      className="block w-full rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      aria-label="Search and select project tags"
+                      aria-autocomplete="list"
+                      aria-controls="tag-suggestions"
+                    />
+
+                    {selectedTags.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
+                        {selectedTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setSelectedTags((prev) => prev.filter((item) => item !== tag))}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-100 transition hover:bg-emerald-500/20"
+                            aria-label={`Remove ${tag} tag`}
+                          >
+                            {tag}
+                            <span aria-hidden="true">×</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {tagInput.trim() && filteredTagSuggestions.length > 0 && (
+                      <ul
+                        id="tag-suggestions"
+                        role="listbox"
+                        aria-label="Suggested tags"
+                        className="absolute z-20 mt-2 max-h-52 w-full overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl"
+                      >
+                        {filteredTagSuggestions.map((suggestion, index) => (
+                          <li key={`${suggestion.value}-${index}`}>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={index === activeTagIndex}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => addSelectedTag(suggestion.value)}
+                              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
+                                index === activeTagIndex
+                                  ? "bg-emerald-500/15 text-emerald-100"
+                                  : "text-[var(--text)] hover:bg-white/5"
+                              }`}
+                            >
+                              <span>{suggestion.displayLabel}</span>
+                              {suggestion.value !== suggestion.canonical && (
+                                <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
+                                  alias
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {tagInput.trim() && filteredTagSuggestions.length === 0 && (
+                      <div className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                        No matching tags found. Try a broader keyword like “shader”, “weather”, “multiplayer”, or “editor”.
+                      </div>
+                    )}
+                  </div>
+
                   {fieldErrors.tags && (
                     <p id="tags-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.tags}

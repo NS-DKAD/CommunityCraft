@@ -2,13 +2,53 @@ import {
   validateSubmissionInput,
   slugFromGitHubFullName,
 } from "@/lib/submission";
-import { getProjectBySlug } from "@/lib/projects";
+import {
+  getProjectBySlug,
+  matchesProjectCategory,
+  matchesProjectQuery,
+} from "@/lib/projects";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
 jest.mock("@/lib/supabase/client", () => ({
   isSupabaseConfigured: jest.fn(() => true),
   getSupabaseClient: jest.fn(),
 }));
+
+describe("matchesProjectQuery", () => {
+  test("matches project tags and category metadata while ignoring case", () => {
+    const project = {
+      name: "PhotoCraft Studio",
+      author: "Mika",
+      description: "A rendering toolkit for ArtCraft.",
+      tags: ["rendering", "shaders", "photorealism"],
+    };
+
+    expect(matchesProjectQuery(project, "SHADERS")).toBe(true);
+    expect(matchesProjectQuery(project, "mika")).toBe(true);
+    expect(matchesProjectQuery(project, "toolkit")).toBe(true);
+    expect(matchesProjectQuery(project, "nonexistent")).toBe(false);
+  });
+
+  test("handles projects without associations gracefully", () => {
+    const project = {
+      name: "Untitled",
+      author: "Solo dev",
+      description: "A minimal project.",
+      tags: [],
+    };
+
+    expect(matchesProjectQuery(project, "solo")).toBe(true);
+    expect(matchesProjectQuery(project, "rendering")).toBe(false);
+  });
+});
+
+describe("matchesProjectCategory", () => {
+  test("accepts the canonical category list and keeps All as a global selector", () => {
+    expect(matchesProjectCategory({ category: "Rendering & Assets" }, "All")).toBe(true);
+    expect(matchesProjectCategory({ category: "Games" }, "Games")).toBe(true);
+    expect(matchesProjectCategory({ category: "Website" }, "Mods")).toBe(false);
+  });
+});
 
 // ─── validateSubmissionInput ─────────────────────────────────────────────────
 
@@ -106,7 +146,17 @@ describe("validateSubmissionInput", () => {
   });
 
   test("accepts all valid categories", () => {
-    const cats = ["Tools", "Mods", "Shaders", "Rendering & Assets", "Libraries"] as const;
+    const cats = [
+      "Tools",
+      "Mods",
+      "Shaders",
+      "Rendering & Assets",
+      "Libraries",
+      "Software",
+      "Website",
+      "Plugin",
+      "Games",
+    ] as const;
     for (const cat of cats) {
       const r = validateSubmissionInput({ ...validBase, category: cat });
       expect(r.valid).toBe(true);
@@ -205,10 +255,22 @@ describe("getProjectBySlug", () => {
       error: null,
     });
 
+    const inProjectTags = jest.fn().mockResolvedValue({ data: [], error: null });
+    const selectProjectTags = jest.fn().mockReturnValue({ in: inProjectTags });
+    const fromProjectTags = jest.fn().mockReturnValue({ select: selectProjectTags });
+
+    const inTags = jest.fn().mockResolvedValue({ data: [], error: null });
+    const selectTags = jest.fn().mockReturnValue({ in: inTags });
+    const fromTags = jest.fn().mockReturnValue({ select: selectTags });
+
     const eqBySlug = jest.fn().mockReturnValue({ maybeSingle });
     const eqApproved = jest.fn().mockReturnValue({ eq: eqBySlug });
     const select = jest.fn().mockReturnValue({ eq: eqApproved });
-    const from = jest.fn().mockReturnValue({ select });
+    const from = jest.fn((table: string) => {
+      if (table === "project_tags") return fromProjectTags();
+      if (table === "tags") return fromTags();
+      return { select };
+    });
 
     (getSupabaseClient as jest.Mock).mockReturnValue({ from });
 

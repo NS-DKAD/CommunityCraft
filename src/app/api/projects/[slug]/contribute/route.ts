@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateContributionRequestInput } from "@/lib/submission";
 import { getSupabaseServiceClient, isServiceClientConfigured } from "@/lib/supabase/server-client";
+import { sendResendEmail, maskContact } from "@/lib/notifications";
 
 const RATE_LIMIT_MAP = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -105,6 +106,54 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (insertError) {
     console.error("[projects/contribute] Insert failed:", insertError.message);
     return NextResponse.json({ error: "Unable to save contribution request." }, { status: 500 });
+  }
+
+  // Attempt notification if configured. If notification is configured but fails,
+  // keep the saved request but respond with an error so the client does not
+  // incorrectly confirm that an admin was notified.
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL?.trim();
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+
+  if (adminEmail && resendApiKey) {
+    // Build a minimal, non-sensitive email body. Mask the contact details in the email
+    // and indicate that full contact is stored in the database for reviewers.
+    const masked = maskContact(String(payload.contact).trim(), String(payload.contactType).trim());
+    const subject = `[CommunityCraft] New contribution interest: ${project.id}`;
+    const text = `A new contribution request was submitted for project ${project.id}.
+
+Display name: ${String(payload.displayName).trim()}
+Contact type: ${String(payload.contactType).trim()}
+Contact (masked): ${masked}
+Skills: ${String(payload.skills).trim()}
+Contribution type: ${String(payload.contributionType).trim()}
+
+Message (truncated): ${
+      (typeof payload.message === 'string' && payload.message.trim()) ? String(payload.message).trim().slice(0, 600) : '(none)'
+    }
+
+Full contact details and the full message are stored in the review table in the database.
+`;
+
+    // Deterministic idempotency key to reduce duplicate notifications on retries
+    const idempotencyKey = Buffer.from(
+      `${project.id}|${String(payload.displayName).trim()}|${String(payload.contact).trim()}|${String(payload.skills).trim()}|${String(payload.contributionType).trim()}`
+    ).toString('base64');
+
+    const sendResult = await sendResendEmail({
+      to: adminEmail,
+      subject,
+      text,
+      idempotencyKey,
+    });
+
+    if (!sendResult.ok) {
+      console.error('[projects/contribute] Notification failed', sendResult);
+      // keep DB record but return error so client does not claim notification succeeded
+      return NextResponse.json(
+        { error: 'Saved, but failed to notify administrators. Please try again later.' },
+        { status: 502 }
+      );
+    }
   }
 
   return NextResponse.json(

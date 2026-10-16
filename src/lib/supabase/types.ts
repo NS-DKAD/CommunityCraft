@@ -209,6 +209,98 @@ export interface Database {
           }
         ];
       };
+      tags: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          is_active: boolean;
+          is_official: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          is_active?: boolean;
+          is_official?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          is_active?: boolean;
+          is_official?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      tag_aliases: {
+        Row: {
+          id: string;
+          alias: string;
+          tag_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          alias: string;
+          tag_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          alias?: string;
+          tag_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tag_aliases_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      project_tags: {
+        Row: {
+          project_id: string;
+          tag_id: string;
+        };
+        Insert: {
+          project_id: string;
+          tag_id: string;
+        };
+        Update: {
+          project_id?: string;
+          tag_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_tags_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "project_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       projects_with_stats: {

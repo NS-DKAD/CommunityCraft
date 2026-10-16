@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Project, ProjectCategory } from "@/types/project";
+import { Project, PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
+import { matchesProjectCategory, matchesProjectQuery } from "@/lib/projects";
 import { ProjectCard } from "./ProjectCard";
 
 interface ProjectCatalogProps {
@@ -10,14 +11,7 @@ interface ProjectCatalogProps {
   errorMessage?: string;
 }
 
-const CATEGORIES: Array<"All" | ProjectCategory> = [
-  "All",
-  "Tools",
-  "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
-];
+const CATEGORIES: Array<"All" | ProjectCategory> = ["All", ...PROJECT_CATEGORIES];
 
 export function ProjectCatalog({
   initialProjects,
@@ -38,26 +32,14 @@ export function ProjectCatalog({
   }, [initialProjects]);
 
   const filteredProjects = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim();
 
     return initialProjects.filter((project) => {
-      const matchesCategory =
-        selectedCategory === "All" || project.category === selectedCategory;
-
-      if (!matchesCategory) {
+      if (!matchesProjectCategory(project, selectedCategory)) {
         return false;
       }
 
-      if (!query) {
-        return true;
-      }
-
-      const matchesName = project.name.toLowerCase().includes(query);
-      const matchesAuthor = project.author.toLowerCase().includes(query);
-      const matchesDescription = project.description.toLowerCase().includes(query);
-      const matchesTags = project.tags.some((tag) => tag.toLowerCase().includes(query));
-
-      return matchesName || matchesAuthor || matchesDescription || matchesTags;
+      return matchesProjectQuery(project, query);
     });
   }, [initialProjects, searchQuery, selectedCategory]);
 
