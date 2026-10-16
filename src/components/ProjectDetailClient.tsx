@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { Project } from "@/types/project";
 import { ProjectCard } from "@/components/ProjectCard";
+import { replacementLevelLabel } from "@/lib/replacements";
 
 interface ProjectDetailClientProps {
   project: Project;
@@ -240,6 +241,29 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
               ))}
             </div>
           </div>
+        ) : null}
+
+        {project.replacing && project.replacing.length > 0 ? (
+          <section className="mt-8" aria-labelledby="replacing-heading">
+            <h2 id="replacing-heading" className="text-sm font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              Replaces / Alternatives to
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {project.replacing.map((replacement) => (
+                <li key={replacement.applicationId} className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-medium text-[var(--text)]">{replacement.applicationName}</span>
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-emerald-200">
+                      {replacementLevelLabel(replacement.level)}
+                    </span>
+                    <Link href={`/?q=${encodeURIComponent(replacement.applicationName)}`} className="font-medium text-emerald-300 underline-offset-2 hover:underline">
+                      Find other alternatives
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
       </article>
 

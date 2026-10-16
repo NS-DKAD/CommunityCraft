@@ -10,6 +10,9 @@ import {
   isServiceClientConfigured,
 } from "@/lib/supabase/server-client";
 import { ProjectCategory } from "@/types/project";
+import { findUnknownApplicationIds, validateReplacementInput } from "@/lib/replacements";
+import { getPersistenceHttpOutcome, persistProjectWithReplacements } from "@/lib/project-persistence";
+import { resolveSubmissionTags } from "@/lib/tags";
 
 // Rate limiting: simple in-memory map (sufficient for single-instance dev/preview).
 // For production, replace with an edge-compatible store (e.g., Upstash Redis).
@@ -74,6 +77,19 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = body as Record<string, unknown>;
+  if (payload.tags !== undefined && (!Array.isArray(payload.tags) || payload.tags.some((tag) => typeof tag !== "string"))) {
+    return NextResponse.json(
+      { error: "Tags must be selected from the catalog.", fieldErrors: [{ field: "tags", message: "Choose tags from the existing catalog." }] },
+      { status: 422 }
+    );
+  }
+  const replacementValidation = validateReplacementInput(payload.replacements);
+  if (!replacementValidation.valid) {
+    return NextResponse.json(
+      { error: replacementValidation.error ?? "Invalid replacement applications.", fieldErrors: [{ field: "replacements", message: replacementValidation.error ?? "Invalid replacement applications." }] },
+      { status: 422 }
+    );
+  }
   const { name, goal, authorName, githubUrl, websiteUrl, discussionUrl, description, category, status, tags } = payload;
 
   const validation = validateSubmissionInput({
@@ -159,6 +175,47 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const submittedTags = Array.isArray(tags) ? tags as string[] : [];
+  let canonicalTags: Array<{ id: string; name: string; slug: string }> = [];
+  if (submittedTags.length > 0) {
+    const [{ data: tagRows, error: tagsError }, { data: aliasRows, error: aliasesError }] = await Promise.all([
+      supabase.from("tags").select("id, name, slug").eq("is_active", true).limit(1000),
+      supabase.from("tag_aliases").select("alias, tag_id").limit(1000),
+    ]);
+    if (tagsError || aliasesError) {
+      console.error("[submit] Tag catalog lookup failed:", tagsError?.message ?? aliasesError?.message);
+      return NextResponse.json({ error: "The tag catalog is temporarily unavailable. Please try again later." }, { status: 503 });
+    }
+    const resolution = resolveSubmissionTags(
+      submittedTags,
+      (tagRows ?? []).map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug })),
+      (aliasRows ?? []).map((alias) => ({ alias: alias.alias, tagId: alias.tag_id }))
+    );
+    if (!resolution.valid) {
+      return NextResponse.json(
+        { error: "One or more selected tags are not in the approved catalog.", fieldErrors: [{ field: "tags", message: `Unknown tags: ${resolution.unknownTags.join(", ")}. Choose existing tags or ask a moderator to add them.` }] },
+        { status: 422 }
+      );
+    }
+    canonicalTags = resolution.tags;
+  }
+
+  if (replacementValidation.replacements.length > 0) {
+    const applicationIds = replacementValidation.replacements.map((item) => item.applicationId);
+    const { data: knownApplications, error: applicationError } = await supabase
+      .from("applications")
+      .select("id")
+      .in("id", applicationIds);
+    if (applicationError) {
+      console.error("[submit] Application catalog lookup failed:", applicationError.message);
+      return NextResponse.json({ error: "The application catalog is temporarily unavailable. Please try again later." }, { status: 503 });
+    }
+    const unknownIds = findUnknownApplicationIds(replacementValidation.replacements, (knownApplications ?? []).map((application) => application.id));
+    if (unknownIds.length > 0) {
+      return NextResponse.json({ error: "One or more selected applications are not in the shared catalog. Refresh the form and choose existing applications." }, { status: 422 });
+    }
+  }
+
   // 5. If a GitHub URL is provided, check for duplicates in the database
   if (normalizedUrl) {
     const { data: existingRows, error: lookupError } = await supabase
@@ -201,9 +258,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 7. Prepare tags and insert the new project into the database
-  const cleanTags = (Array.isArray(tags) ? (tags as string[]) : [])
-    .map((t) => String(t).trim().toLowerCase())
-    .filter((t) => t.length > 0);
+  const cleanTags = canonicalTags.map((tag) => tag.slug);
 
   const insertPayload = {
     slug,
@@ -220,18 +275,69 @@ export async function POST(request: NextRequest) {
     is_approved: false,
   };
 
-  const { data: newProject, error: insertError } = await supabase
-    .from("projects")
-    .insert(insertPayload)
-    .select("id, slug")
-    .single();
+  const persistence = await persistProjectWithReplacements({
+    replacements: replacementValidation.replacements,
+    hasTagAssociations: canonicalTags.length > 0,
+    insertProject: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .insert(insertPayload)
+        .select("id, slug")
+        .single();
+      return { project: data, error: error?.message ?? null };
+    },
+    insertReplacements: async (projectId, replacements) => {
+      if (canonicalTags.length > 0) {
+        const { error: tagInsertError } = await supabase.from("project_tags").insert(
+          canonicalTags.map((tag) => ({ project_id: projectId, tag_id: tag.id }))
+        );
+        if (tagInsertError) return { error: tagInsertError.message };
+      }
+      if (replacements.length > 0) {
+        const { error: replacementInsertError } = await supabase.from("project_replacements").insert(
+          replacements.map((replacement) => ({
+            project_id: projectId,
+            application_id: replacement.applicationId,
+            replacement_level: replacement.level,
+          }))
+        );
+        if (replacementInsertError) return { error: replacementInsertError.message };
+      }
+      return { error: null };
+    },
+    deleteProject: async (projectId) => {
+      const { data, error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", projectId)
+        .select("id")
+        .maybeSingle();
+      return { deleted: Boolean(data), error: error?.message ?? null };
+    },
+  });
 
-  if (insertError || !newProject) {
-    console.error("[submit] Insert failed:", insertError?.message);
+  const persistenceOutcome = getPersistenceHttpOutcome(persistence);
+  if (!persistenceOutcome.received) {
+    console.error("[submit] Project submission was not saved:", persistence.error);
     return NextResponse.json(
-      { error: "Failed to save project. Please try again." },
-      { status: 500 }
+      { error: persistenceOutcome.message },
+      { status: persistenceOutcome.status }
     );
+  }
+
+  const newProject = persistence.project;
+  if (!newProject) {
+    console.error("[submit] Persistence returned no project unexpectedly.");
+    return NextResponse.json({ error: "The submission status could not be confirmed. Please contact a moderator before resubmitting." }, { status: 503 });
+  }
+
+  const persistenceWarning = persistence.kind === "saved-with-incomplete-relations";
+  if (persistenceWarning) {
+    console.error("[submit] Project was saved, but tag/replacement relations and cleanup failed:", {
+      projectId: newProject.id,
+      replacementError: persistence.error,
+      cleanupError: persistence.cleanupError,
+    });
   }
 
   // 8. If GitHub metadata was fetched, insert or update the GitHub stats
@@ -251,11 +357,11 @@ export async function POST(request: NextRequest) {
   // 9. Return a success response with the new project's details
   return NextResponse.json(
     {
-      message: "Project submitted successfully. It will appear in the catalog once reviewed.",
+      message: persistenceOutcome.message,
       slug: newProject.slug,
       name: insertPayload.name,
     },
-    { status: 201 }
+    { status: persistenceOutcome.status }
   );
 }
 

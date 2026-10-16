@@ -9,6 +9,7 @@ interface ProjectCatalogProps {
   initialProjects: Project[];
   dataSource?: "database" | "demo" | "error";
   errorMessage?: string;
+  initialQuery?: string;
 }
 
 const CATEGORIES: Array<"All" | ProjectCategory> = ["All", ...PROJECT_CATEGORIES];
@@ -17,8 +18,9 @@ export function ProjectCatalog({
   initialProjects,
   dataSource = "demo",
   errorMessage,
+  initialQuery = "",
 }: ProjectCatalogProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<"All" | ProjectCategory>("All");
 
   const categoryCounts = useMemo(() => {
@@ -112,7 +114,7 @@ export function ProjectCatalog({
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search mods, tools, tags..."
+                placeholder="Search projects, tags, or replacement apps..."
                 className="w-full rounded-full border border-[var(--border)] bg-[var(--surface-strong)] py-3 pl-11 pr-10 text-sm text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-colors focus:border-[var(--border-strong)]"
               />
               {searchQuery && (

@@ -78,7 +78,7 @@ npm run dev
 Visit **http://localhost:3000**:
 - If Supabase is connected, the top banner will show a green confirmation: **Live Database Connected**.
 - If `.env.local` is missing or not configured, the website automatically stays in **Demo Data Mode** without crashing.
-
+- run taskkill /PID 16168 /F to stop it and start a new one.
 ---
 
 ## 7. Moderation workflow for pending submissions

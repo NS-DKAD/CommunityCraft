@@ -121,13 +121,16 @@ Ensuite : enrichissement des métadonnées GitHub, comptes et gestion des projet
 
 ## 7. Vérifications
 
-Les vérifications locales ont été exécutées avec succès après l'intégration des tags normalisés :
-- `npx tsc --noEmit` : OK
-- `npm run lint` : OK au niveau erreurs ; 2 warnings de code existant non bloquants (`Link` non utilisé, variable `_err` non utilisée)
-- `npx next build` : OK
-- `npm test -- --runInBand` : 23 tests OK
+Dernière vérification locale pour la fonctionnalité Replacing (2026-10-16) :
+- `npx tsc --noEmit` : OK.
+- `npm run lint` : OK, 0 erreur et 2 warnings préexistants (`Link` non utilisé dans la page projet et `_err` non utilisé dans les notifications).
+- `npm test -- --runInBand` : OK, 40 tests, dont absence de relation normalisée et repli legacy uniquement en cas d'erreur de lecture.
+- `npx next build` : échec environnemental répété dans Turbopack lors du traitement CSS, avec un processus enfant qui se termine sans diagnostic applicatif.
+- `npx next build --webpack` : échec environnemental, résolution DNS impossible pour `fonts.googleapis.com` (polices `next/font`), puis `EPERM` à la création de `.next/server/app/submit`. Build de production non confirmé.
+- Vérification HTTP locale : `/` et `/?q=Photoshop` ont tous deux répondu `200`, le shell de la page était présent et le champ de recherche contenait `Photoshop` pour la seconde URL ; aucune soumission n'a été faite.
+- La migration Replacing a été exécutée sur Supabase selon la confirmation de l'utilisateur. Pour les tags, l'utilisateur rapporte l'exécution de la migration de rattrapage puis du SQL manuel d'ajout approuvé. Le contrôle final fourni par le propriétaire indique 25 `ASSOCIATED`, 3 `UNCATALOGUED` (mcp sur SolidCraft, office sur OpenPlayground, test sur Test Submit 2), zéro `AMBIGUOUS` et zéro `MISSING_ASSOCIATION`. C'est un résultat communiqué par le propriétaire, non exécuté par l'agent.
 
-L’environnement local ne permet pas de valider la migration en base réelle distante ; la vérification ci-dessus couvre le code applicatif et les tests, pas une exécution SQL réelle sur Supabase.
+Les contrôles TypeScript, lint et tests couvrent le code local. Ils ne prouvent ni l'application des migrations distantes ni le fonctionnement contre le projet Supabase réel.
 
 ## 8. Liens et sécurité
 
@@ -140,6 +143,34 @@ L’environnement local ne permet pas de valider la migration en base réelle di
 ## 9. Projets similaires et sélection de tags — améliorations live
 - [x] La logique des projets similaires a été affinée pour privilégier les tags partagés réels, avec un bonus supplémentaire si la catégorie est identique et un léger bonus si le statut correspond.
 - [x] Le score reste simple et explicite : une ou plusieurs tags communes comptent plus qu'un simple partage de catégorie, tout en conservant un fallback si aucune relation forte n'est détectée.
-- [x] Le formulaire de soumission inclut désormais un sélecteur multi-tags searchable, navigable au clavier, avec déduplication et suggestions issues des tags canoniques et alias connus.
-- [x] Les suggestions de tags restent lisibles en cas d'absence de correspondance et évitent de créer des tags arbitraires au moment de la saisie.
-- [x] La compatibilité legacy `projects.tags` est conservée ; la liste soumise reste envoyée au backend sans créer de nouvelle migration ni modifier les données distantes.
+- [x] Le formulaire propose seulement les tags canoniques actifs et leurs alias résolus vers le canonique ; une recherche sans résultat ne permet pas de créer un tag libre.
+- [x] L'API revalide les slugs/alias contre le catalogue actif, rejette les tags inconnus ou ambigus, écrit les identifiants canoniques dans `project_tags` et conserve les slugs dans `projects.tags` pour compatibilité.
+- [x] Le catalogue public affiche uniquement les noms liés via `project_tags` lorsque la lecture normalisée réussit ; zéro relation signifie zéro tag affiché. Le repli vers `projects.tags` ne se produit qu'en cas d'échec de lecture du schéma normalisé.
+- [x] L'écriture des associations est intégrée à la persistance fiable de la soumission ; un échec déclenche un nettoyage vérifié ou une confirmation explicite évitant une soumission en double.
+- [x] `projects.tags` reste conservé pour les données historiques et les anciens projets.
+
+## 10. Replacing — intégration locale
+- [x] Modèle normalisé local : catalogue partagé `applications` et table de liaison `project_replacements`, avec niveaux `Complete`, `Partial` et `Specialized` et unicité par paire projet/application.
+- [x] La migration versionnée `supabase/migrations/20261016_add_replacing_applications.sql` vérifie d'abord le type et les colonnes requises si `applications` existe déjà ; elle s'arrête avec un diagnostic sans modifier les données si le schéma ou les noms/IDs/slugs sont incompatibles. Elle applique ensuite RLS : lecture publique du catalogue, lecture des relations uniquement pour les projets approuvés, aucun droit d'écriture public. Elle ajoute Photoshop comme première entrée et bloque les doublons de nom sans tenir compte de la casse.
+- [x] Le formulaire de soumission permet de rechercher et sélectionner plusieurs applications déjà référencées, de choisir un niveau compréhensible et de retirer une sélection. Une saisie inconnue n'est pas créée ni soumise ; l'interface indique qu'il faut demander à un modérateur d'ajouter l'application.
+- [x] Le serveur revalide les niveaux et les identifiants du catalogue et rejette les doublons ; si l'écriture des relations échoue, il tente de supprimer la fiche nouvellement créée et vérifie la suppression. Si le nettoyage échoue, il confirme la réception avec un message « ne pas resoumettre » et journalise les deux erreurs afin d'éviter une soumission en double.
+- [x] Le catalogue recherche aussi dans les noms d'applications remplacées ; les fiches projet affichent les relations et proposent un lien pour trouver d'autres alternatives.
+- [x] Les projets sans relation restent compatibles ; la propriété `replacing` est vide par défaut et l'échec de lecture des nouvelles tables n'empêche pas le chargement des projets.
+- [x] Tests ajoutés pour plusieurs applications, les trois niveaux, la recherche par application, l'absence de relations, les doublons et les identifiants inconnus ; ils couvrent aussi l'échec de sauvegarde des relations, le nettoyage confirmé et le nettoyage en échec avec confirmation de réception.
+- [x] L'utilisateur confirme avoir exécuté la migration `20261016_add_replacing_applications.sql` dans Supabase. Vérification rapportée : `applications` et `project_replacements` ont RLS activé, et l'entrée Photoshop a été vérifiée. Le schéma distant est donc activé pour Replacing ; aucune écriture distante n'a été effectuée par l'agent.
+- [ ] Les ajouts futurs au catalogue restent modérés et se font via SQL contrôlé ; aucun écran d'administration n'est inclus.
+
+## 11. Tags — état après vérification post-rattrapage
+- [x] Les tables `tags`, `tag_aliases` et `project_tags` existent dans Supabase et RLS est activé sur chacune (vérification rapportée par l'utilisateur).
+- [x] Le backfill SQL est ponctuel et ne synchronise pas les nouvelles soumissions ; le formulaire et l'API ont été corrigés localement pour accepter uniquement les tags canoniques/alias déjà présents.
+- [x] L'utilisateur rapporte avoir exécuté manuellement `supabase/migrations/20261016_reconcile_known_project_tags.sql`. Cette migration associe uniquement les tags canoniques ou alias déjà existants ; elle ne crée aucun tag public à partir de texte libre historique. Aucune migration n'a été lancée par l'agent.
+- [x] Résultat intermédiaire après migration de rattrapage, rapporté par le propriétaire : 17 associations `ASSOCIATED`, 11 `UNCATALOGUED`.
+- [!] La version initiale de `20261015_normalize_tags_and_categories.sql` insérait automatiquement toutes les valeurs historiques dans le catalogue actif. Le fichier local a été corrigé pour les prochaines exécutions : il ne crée plus de tags depuis `projects.tags`. Cette modification locale ne retire ni ne désactive les lignes déjà créées sur une base distante ; leur statut doit être vérifié avant de les considérer comme approuvées.
+- [x] Le propriétaire a validé `3D Modeling` (alias `3d-modeling`), `CAD`, `BREP`, `STEP`, `egui`, `WebAssembly` (alias `wasm`) et `Web`. Ne pas créer `test`, `mcp` ni `office`.
+- [x] Le propriétaire rapporte avoir exécuté `supabase/manual/approve_validated_tags.sql`. Le fichier ajoute uniquement les sept tags approuvés, les alias `3d-modeling` et `wasm`, puis les liens legacy correspondants ; il ne modifie ni `projects.tags` ni les fiches projet.
+- [x] Contrôle final en lecture seule fourni par le propriétaire : 25 lignes `ASSOCIATED`, 3 `UNCATALOGUED` (mcp pour SolidCraft, office pour OpenPlayground, test pour Test Submit 2), aucune `AMBIGUOUS` ni `MISSING_ASSOCIATION`. Ce résultat est rapporté par le propriétaire, pas exécuté par l'agent.
+- [x] `test` reste non catalogué selon ce résultat ; aucune suppression n'a été nécessaire ni effectuée. Les valeurs legacy et la fiche Test Submit 2 sont préservées. Le contrôle en lecture seule `supabase/manual/check_temporary_test_tag.sql` reste disponible si nécessaire.
+- [ ] Vérifier la modération de `SolidCraft`, `OpenPlayground` et `Test Submit 2` avec `supabase/manual/check_named_project_moderation.sql` ; cette vérification distante n'a pas été exécutée par l'agent.
+- [x] `projects.tags` est conservé comme compatibilité legacy ; mcp, office et test restent non catalogués volontairement.
+
+Le jeu de tags approuvé et ses associations sont rapportés appliqués et vérifiés. Les trois valeurs non cataloguées restent une limite connue et volontaire. Arrêter ici ; ne commencer ni demandes de collaboration, ni projets similaires, ni autre étape sans autorisation explicite du propriétaire.

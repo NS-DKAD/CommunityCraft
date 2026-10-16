@@ -21,6 +21,15 @@ export type ProjectStatus =
 
 export type ProjectSourceType = "official" | "community" | "external" | "unverified";
 
+export type ReplacementLevel = "Complete" | "Partial" | "Specialized";
+
+export interface ProjectReplacement {
+  applicationId: string;
+  applicationName: string;
+  applicationSlug: string;
+  level: ReplacementLevel;
+}
+
 export interface Project {
   id: string;
   slug?: string;
@@ -40,4 +49,5 @@ export interface Project {
   sourceVerified?: boolean | null;
   discussionUrl?: string | null;
   websiteUrl?: string | null;
+  replacing?: ProjectReplacement[];
 }

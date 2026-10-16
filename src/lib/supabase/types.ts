@@ -301,6 +301,72 @@ export interface Database {
           }
         ];
       };
+      applications: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      project_replacements: {
+        Row: {
+          id: string;
+          project_id: string;
+          application_id: string;
+          replacement_level: "Complete" | "Partial" | "Specialized";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          application_id: string;
+          replacement_level: "Complete" | "Partial" | "Specialized";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          application_id?: string;
+          replacement_level?: "Complete" | "Partial" | "Specialized";
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "project_replacements_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "project_replacements_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: {
       projects_with_stats: {

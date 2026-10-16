@@ -5,7 +5,16 @@ import { Footer } from "@/components/Footer";
 import { CatalogSkeleton } from "@/components/CatalogSkeleton";
 import { ProjectCatalogServer } from "@/components/ProjectCatalogServer";
 
-export default function Home() {
+interface HomeProps {
+  searchParams: Promise<{ q?: string }>;
+}
+
+async function CatalogForSearch({ searchParams }: HomeProps) {
+  const { q = "" } = await searchParams;
+  return <ProjectCatalogServer initialQuery={q} />;
+}
+
+export default function Home({ searchParams }: HomeProps) {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
       <Header />
@@ -62,7 +71,7 @@ export default function Home() {
         <div className="relative z-10 -mt-12 px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-[1500px]">
             <Suspense fallback={<CatalogSkeleton />}>
-              <ProjectCatalogServer />
+              <CatalogForSearch searchParams={searchParams} />
             </Suspense>
           </div>
         </div>

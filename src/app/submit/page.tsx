@@ -6,6 +6,10 @@ import { ProjectCategory } from "@/types/project";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { ReplacementLevel } from "@/types/project";
+
+type ApplicationOption = { id: string; name: string; slug: string };
+type SelectedReplacement = { application: ApplicationOption; level: ReplacementLevel };
 
 type FieldErrors = Record<string, string | undefined>;
 
@@ -13,6 +17,7 @@ type TagSuggestion = {
   value: string;
   canonical: string;
   displayLabel: string;
+  isAlias: boolean;
 };
 
 interface SubmitResult {
@@ -28,29 +33,6 @@ const CATEGORIES: ProjectCategory[] = [
   "Plugin",
   "Games",
   "Mods",
-];
-
-const DEFAULT_TAG_SUGGESTIONS = [
-  "rendering",
-  "textures",
-  "shaders",
-  "lighting",
-  "modding",
-  "voxels",
-  "multiplayer",
-  "networking",
-  "nodes",
-  "automation",
-  "weather",
-  "biomes",
-  "materials",
-  "foliage",
-  "entities",
-  "editor",
-  "tools",
-  "performance",
-  "procedural",
-  "ui",
 ];
 
 const INITIAL_STATE = {
@@ -98,8 +80,39 @@ export default function SubmitPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
+  const [tagCatalogUnavailable, setTagCatalogUnavailable] = useState(false);
   const [activeTagIndex, setActiveTagIndex] = useState(0);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
+  const [applications, setApplications] = useState<ApplicationOption[]>([]);
+  const [applicationInput, setApplicationInput] = useState("");
+  const [selectedReplacements, setSelectedReplacements] = useState<SelectedReplacement[]>([]);
+  const [applicationsUnavailable, setApplicationsUnavailable] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadApplications() {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        if (!isCancelled) setApplicationsUnavailable(true);
+        return;
+      }
+      const { data, error } = await supabase.from("applications").select("id, name, slug").order("name").limit(500);
+      if (!isCancelled) {
+        if (error) setApplicationsUnavailable(true);
+        else setApplications((data ?? []).map((item) => ({ id: item.id, name: item.name, slug: item.slug })));
+      }
+    }
+    void loadApplications();
+    return () => { isCancelled = true; };
+  }, []);
+
+  const filteredApplications = useMemo(() => {
+    const query = applicationInput.trim().toLocaleLowerCase();
+    return applications
+      .filter((item) => !selectedReplacements.some((selected) => selected.application.id === item.id))
+      .filter((item) => !query || item.name.toLocaleLowerCase().includes(query))
+      .slice(0, 8);
+  }, [applicationInput, applications, selectedReplacements]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -109,69 +122,43 @@ export default function SubmitPage() {
         const supabase = getSupabaseClient();
 
         if (!supabase) {
-          if (!isCancelled) {
-            setTagSuggestions(
-              DEFAULT_TAG_SUGGESTIONS.map((tag) => ({
-                value: tag,
-                canonical: tag,
-                displayLabel: tag,
-              }))
-            );
-          }
+          if (!isCancelled) setTagCatalogUnavailable(true);
           return;
         }
 
-        const [{ data: tagRows }, { data: aliasRows }] = await Promise.all([
-          supabase.from("tags").select("name, slug").eq("is_active", true).limit(200),
-          supabase.from("tag_aliases").select("alias, tag_id").limit(200),
+        const [{ data: tagRows, error: tagError }, { data: aliasRows, error: aliasError }] = await Promise.all([
+          supabase.from("tags").select("id, name, slug").eq("is_active", true).order("name").limit(1000),
+          supabase.from("tag_aliases").select("alias, tag_id").order("alias").limit(1000),
         ]);
+        if (tagError || aliasError) throw new Error("Unable to load the tag catalog.");
 
-        const canonicalNames = (tagRows ?? []).map((row) => String(row.name ?? "").trim());
-        const aliasMap = new Map<string, string>();
-
+        const canonicalById = new Map((tagRows ?? []).map((tag) => [tag.id, tag]));
+        const suggestions: TagSuggestion[] = (tagRows ?? []).map((tag) => ({
+          value: tag.slug,
+          canonical: tag.slug,
+          displayLabel: tag.name,
+          isAlias: false,
+        }));
         for (const row of aliasRows ?? []) {
+          const canonical = canonicalById.get(row.tag_id);
           const alias = String(row.alias ?? "").trim();
-          const tagId = typeof row.tag_id === "string" ? row.tag_id : String(row.tag_id ?? "");
-          if (!alias || !tagId) continue;
-
-          aliasMap.set(normalizeTagToken(alias), alias);
+          if (!canonical || !alias) continue;
+          suggestions.push({
+            value: normalizeTagToken(alias),
+            canonical: canonical.slug,
+            displayLabel: alias,
+            isAlias: true,
+          });
         }
 
-        const known = new Map<string, string>();
-        for (const tag of canonicalNames) {
-          const normalized = normalizeTagToken(tag);
-          if (normalized) {
-            known.set(normalized, normalized);
-          }
+        const uniqueSuggestions = new Map<string, TagSuggestion>();
+        for (const suggestion of suggestions) {
+          const key = `${normalizeTagToken(suggestion.value)}:${suggestion.canonical}`;
+          if (!uniqueSuggestions.has(key)) uniqueSuggestions.set(key, suggestion);
         }
-
-        for (const [alias, rawAlias] of aliasMap.entries()) {
-          if (!known.has(alias)) {
-            known.set(alias, normalizeTagToken(rawAlias));
-          }
-        }
-
-        const mergedSuggestions = Array.from(known.keys())
-          .map((tag) => ({
-            value: tag,
-            canonical: tag,
-            displayLabel: tag,
-          }))
-          .sort((a, b) => a.value.localeCompare(b.value));
-
-        if (!isCancelled) {
-          setTagSuggestions(mergedSuggestions.length > 0 ? mergedSuggestions : DEFAULT_TAG_SUGGESTIONS.map((tag) => ({ value: tag, canonical: tag, displayLabel: tag })));
-        }
+        if (!isCancelled) setTagSuggestions(Array.from(uniqueSuggestions.values()));
       } catch {
-        if (!isCancelled) {
-          setTagSuggestions(
-            DEFAULT_TAG_SUGGESTIONS.map((tag) => ({
-              value: tag,
-              canonical: tag,
-              displayLabel: tag,
-            }))
-          );
-        }
+        if (!isCancelled) setTagCatalogUnavailable(true);
       }
     }
 
@@ -193,11 +180,11 @@ export default function SubmitPage() {
       }
 
       if (!query) {
-        return !selectedTags.includes(normalizedValue || suggestion.canonical);
+        return !selectedTags.includes(suggestion.canonical);
       }
 
       return (
-        !selectedTags.includes(normalizedValue || suggestion.canonical) &&
+        !selectedTags.includes(suggestion.canonical) &&
         (normalizedValue.includes(query) ||
           normalizedCanonical.includes(query) ||
           suggestion.displayLabel.toLowerCase().includes(query))
@@ -216,8 +203,8 @@ export default function SubmitPage() {
     setFieldErrors((prev) => ({ ...prev, [e.target.name]: undefined }));
   }
 
-  function addSelectedTag(tagName: string) {
-    const canonical = normalizeTagToken(tagName);
+  function addSelectedTag(suggestion: TagSuggestion) {
+    const canonical = suggestion.canonical;
     if (!canonical) {
       return;
     }
@@ -230,9 +217,8 @@ export default function SubmitPage() {
 
   function handleTagKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (!filteredTagSuggestions.length) {
-      if (event.key === "Enter" && normalizeTagToken(tagInput)) {
+      if (event.key === "Enter") {
         event.preventDefault();
-        addSelectedTag(tagInput);
       }
       return;
     }
@@ -251,7 +237,8 @@ export default function SubmitPage() {
 
     if (event.key === "Enter") {
       event.preventDefault();
-      addSelectedTag(filteredTagSuggestions[activeTagIndex]?.value ?? tagInput);
+      const selected = filteredTagSuggestions[activeTagIndex];
+      if (selected) addSelectedTag(selected);
       return;
     }
 
@@ -285,6 +272,7 @@ export default function SubmitPage() {
             category: form.category,
             status: form.status,
             tags,
+            replacements: selectedReplacements.map(({ application, level }) => ({ applicationId: application.id, level })),
           }),
         });
 
@@ -306,6 +294,8 @@ export default function SubmitPage() {
           setForm(INITIAL_STATE);
           setSelectedTags([]);
           setTagInput("");
+          setSelectedReplacements([]);
+          setApplicationInput("");
         } else if (res.status === 422 && json.fieldErrors) {
           const errors: FieldErrors = {};
           for (const fe of json.fieldErrors) {
@@ -704,6 +694,11 @@ export default function SubmitPage() {
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                     Choose from existing canonical tags and known aliases. Up to 10 tags.
                   </p>
+                  {tagCatalogUnavailable && (
+                    <p className="mt-2 text-xs text-amber-300" role="status">
+                      The tag catalog is unavailable. You can continue without tags; new tags must be added to the catalog by a moderator.
+                    </p>
+                  )}
 
                   <div className="mt-2 relative">
                     <input
@@ -754,7 +749,7 @@ export default function SubmitPage() {
                               role="option"
                               aria-selected={index === activeTagIndex}
                               onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => addSelectedTag(suggestion.value)}
+                              onClick={() => addSelectedTag(suggestion)}
                               className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
                                 index === activeTagIndex
                                   ? "bg-emerald-500/15 text-emerald-100"
@@ -762,7 +757,7 @@ export default function SubmitPage() {
                               }`}
                             >
                               <span>{suggestion.displayLabel}</span>
-                              {suggestion.value !== suggestion.canonical && (
+                              {suggestion.isAlias && (
                                 <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
                                   alias
                                 </span>
@@ -784,6 +779,67 @@ export default function SubmitPage() {
                     <p id="tags-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.tags}
                     </p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="application-search" className="block text-sm font-medium text-[var(--text-soft)]">
+                    Replaces / Alternatives to <span className="text-xs font-normal text-[var(--text-muted)]">(optional)</span>
+                  </label>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Select an existing application, then describe how this project compares to it.
+                  </p>
+                  <input
+                    id="application-search"
+                    type="search"
+                    value={applicationInput}
+                    onChange={(event) => setApplicationInput(event.target.value)}
+                    placeholder="Search applications, for example Photoshop…"
+                    className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    aria-label="Search existing applications to replace"
+                    aria-controls="application-suggestions"
+                  />
+                  {selectedReplacements.length > 0 && (
+                    <ul className="mt-3 space-y-2" aria-label="Selected replacement applications">
+                      {selectedReplacements.map(({ application, level }) => (
+                        <li key={application.id} className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="text-sm font-medium text-[var(--text)]">{application.name}</span>
+                          <div className="flex items-center gap-2">
+                            <label className="sr-only" htmlFor={`replacement-level-${application.id}`}>Replacement level for {application.name}</label>
+                            <select
+                              id={`replacement-level-${application.id}`}
+                              value={level}
+                              onChange={(event) => setSelectedReplacements((items) => items.map((item) => item.application.id === application.id ? { ...item, level: event.target.value as ReplacementLevel } : item))}
+                              className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-xs text-[var(--text)]"
+                            >
+                              <option value="Complete">Full alternative</option>
+                              <option value="Partial">Covers some features</option>
+                              <option value="Specialized">Specialized alternative</option>
+                            </select>
+                            <button type="button" onClick={() => setSelectedReplacements((items) => items.filter((item) => item.application.id !== application.id))} className="rounded-md px-2 py-2 text-xs text-rose-300 hover:bg-rose-500/10" aria-label={`Remove ${application.name}`}>Remove</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {applicationInput.trim() && filteredApplications.length > 0 && (
+                    <ul id="application-suggestions" role="listbox" aria-label="Existing application matches" className="mt-2 max-h-52 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl">
+                      {filteredApplications.map((application) => (
+                        <li key={application.id}>
+                          <button type="button" role="option" aria-selected="false" onClick={() => { setSelectedReplacements((items) => [...items, { application, level: "Partial" }]); setApplicationInput(""); }} className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-emerald-500/10">
+                            {application.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {applicationInput.trim() && filteredApplications.length === 0 && (
+                    <p className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]" role="status">
+                      No matching application found. Only applications already in the shared catalog can be selected; ask a moderator to add a missing one.
+                    </p>
+                  )}
+                  {applicationsUnavailable && (
+                    <p className="mt-2 text-xs text-amber-300" role="status">The application catalog is unavailable. You can still submit without replacement information.</p>
                   )}
                 </div>
 

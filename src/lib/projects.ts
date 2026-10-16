@@ -1,6 +1,7 @@
-import { Project, ProjectCategory } from "@/types/project";
+import { Project, ProjectCategory, ProjectReplacement } from "@/types/project";
 import { DEMO_PROJECTS } from "@/data/demo-projects";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase/client";
+import { matchesReplacementApplication } from "./replacements";
 
 export type ProjectDataSource = "database" | "demo" | "error";
 
@@ -68,21 +69,21 @@ export function scoreSimilarProject(
 
 export async function loadProjectTagNamesByProjectId(
   projectIds: string[]
-): Promise<Map<string, string[]>> {
+): Promise<{ tagNamesByProjectId: Map<string, string[]>; readSucceeded: boolean }> {
   const map = new Map<string, string[]>();
 
   if (projectIds.length === 0 || !isSupabaseConfigured()) {
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: false };
   }
 
   const supabase = getSupabaseClient();
   if (!supabase) {
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: false };
   }
 
   const uniqueProjectIds = Array.from(new Set(projectIds.filter(Boolean)));
   if (uniqueProjectIds.length === 0) {
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: true };
   }
 
   const { data: projectTagRows, error: projectTagError } = await supabase
@@ -92,11 +93,11 @@ export async function loadProjectTagNamesByProjectId(
 
   if (projectTagError) {
     console.error("[CommunityCraft] Failed to fetch normalized project tags:", projectTagError.message);
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: false };
   }
 
   if (!projectTagRows || projectTagRows.length === 0) {
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: true };
   }
 
   const tagIds = Array.from(
@@ -108,7 +109,7 @@ export async function loadProjectTagNamesByProjectId(
   );
 
   if (tagIds.length === 0) {
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: true };
   }
 
   const { data: tagRows, error: tagError } = await supabase
@@ -118,7 +119,7 @@ export async function loadProjectTagNamesByProjectId(
 
   if (tagError) {
     console.error("[CommunityCraft] Failed to fetch normalized tag names:", tagError.message);
-    return map;
+    return { tagNamesByProjectId: map, readSucceeded: false };
   }
 
   const tagNameById = new Map<string, string>();
@@ -146,7 +147,18 @@ export async function loadProjectTagNamesByProjectId(
     map.set(projectId, Array.from(new Set([...existingTags, tagName])));
   }
 
-  return map;
+  return { tagNamesByProjectId: map, readSucceeded: true };
+}
+
+export function resolveProjectTags(
+  projectId: string,
+  legacyTags: unknown,
+  normalizedTagNames: Map<string, string[]>,
+  normalizedReadSucceeded: boolean
+): string[] {
+  const normalizedTags = normalizedTagNames.get(projectId);
+  if (normalizedTags !== undefined) return normalizedTags;
+  return normalizedReadSucceeded ? [] : normalizeProjectTags(legacyTags);
 }
 
 export function matchesProjectCategory(
@@ -157,7 +169,7 @@ export function matchesProjectCategory(
 }
 
 export function matchesProjectQuery(
-  project: Pick<Project, "name" | "author" | "description" | "tags">,
+  project: Pick<Project, "name" | "author" | "description" | "tags" | "replacing">,
   query: string
 ): boolean {
   const trimmedQuery = query.trim();
@@ -172,7 +184,51 @@ export function matchesProjectQuery(
   const matchesDescription = project.description.toLowerCase().includes(normalizedQuery);
   const matchesTags = project.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
 
-  return matchesName || matchesAuthor || matchesDescription || matchesTags;
+  return matchesName || matchesAuthor || matchesDescription || matchesTags ||
+    matchesReplacementApplication(project.replacing, normalizedQuery);
+}
+
+export async function loadProjectReplacementsByProjectId(
+  projectIds: string[]
+): Promise<Map<string, ProjectReplacement[]>> {
+  const result = new Map<string, ProjectReplacement[]>();
+  if (!projectIds.length || !isSupabaseConfigured()) return result;
+  const supabase = getSupabaseClient();
+  if (!supabase) return result;
+
+  const { data: relationRows, error: relationError } = await supabase
+    .from("project_replacements")
+    .select("project_id, application_id, replacement_level")
+    .in("project_id", Array.from(new Set(projectIds.filter(Boolean))));
+  if (relationError) {
+    console.error("[CommunityCraft] Failed to fetch project replacements:", relationError.message);
+    return result;
+  }
+  if (!relationRows?.length) return result;
+
+  const applicationIds = Array.from(new Set(relationRows.map((row) => row.application_id)));
+  const { data: applications, error: applicationsError } = await supabase
+    .from("applications")
+    .select("id, name, slug")
+    .in("id", applicationIds);
+  if (applicationsError) {
+    console.error("[CommunityCraft] Failed to fetch replacement applications:", applicationsError.message);
+    return result;
+  }
+  const applicationById = new Map((applications ?? []).map((app) => [app.id, app]));
+  for (const row of relationRows) {
+    const app = applicationById.get(row.application_id);
+    if (!app || (row.replacement_level !== "Complete" && row.replacement_level !== "Partial" && row.replacement_level !== "Specialized")) continue;
+    const existing = result.get(row.project_id) ?? [];
+    existing.push({
+      applicationId: app.id,
+      applicationName: app.name,
+      applicationSlug: app.slug,
+      level: row.replacement_level,
+    });
+    result.set(row.project_id, existing);
+  }
+  return result;
 }
 
 export async function getProjects(): Promise<GetProjectsResult> {
@@ -221,7 +277,8 @@ export async function getProjects(): Promise<GetProjectsResult> {
     const projectIds = data
       .map((row) => (typeof row.id === "string" ? row.id : String(row.id ?? "")))
       .filter(Boolean);
-    const normalizedTagMap = await loadProjectTagNamesByProjectId(projectIds);
+    const normalizedTagResult = await loadProjectTagNamesByProjectId(projectIds);
+    const replacementMap = await loadProjectReplacementsByProjectId(projectIds);
 
     const projects: Project[] = data.map((row) => {
       const sourceDate = row.last_github_commit_at
@@ -238,9 +295,12 @@ export async function getProjects(): Promise<GetProjectsResult> {
           : null;
 
       const projectId = typeof row.id === "string" ? row.id : String(row.id ?? "");
-      const tags =
-        normalizedTagMap.get(projectId) ??
-        normalizeProjectTags((row as Record<string, unknown>).tags ?? []);
+      const tags = resolveProjectTags(
+        projectId,
+        (row as Record<string, unknown>).tags,
+        normalizedTagResult.tagNamesByProjectId,
+        normalizedTagResult.readSucceeded
+      );
 
       return {
         id: row.id,
@@ -270,6 +330,7 @@ export async function getProjects(): Promise<GetProjectsResult> {
           typeof row.source_verified === "boolean" ? row.source_verified : null,
         discussionUrl: row.discussion_url ?? null,
         websiteUrl: row.website_url ?? null,
+        replacing: replacementMap.get(projectId) ?? [],
       };
     });
 
@@ -333,8 +394,14 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
       : null;
 
   const projectId = typeof row.id === "string" ? row.id : String(row.id ?? "");
-  const normalizedTagMap = await loadProjectTagNamesByProjectId([projectId]);
-  const tags = normalizedTagMap.get(projectId) ?? normalizeProjectTags((row as Record<string, unknown>).tags ?? []);
+  const normalizedTagResult = await loadProjectTagNamesByProjectId([projectId]);
+  const replacementMap = await loadProjectReplacementsByProjectId([projectId]);
+  const tags = resolveProjectTags(
+    projectId,
+    (row as Record<string, unknown>).tags,
+    normalizedTagResult.tagNamesByProjectId,
+    normalizedTagResult.readSucceeded
+  );
 
   return {
     id: row.id,
@@ -364,6 +431,7 @@ export async function getProjectBySlug(slug: string): Promise<Project | null> {
       typeof row.source_verified === "boolean" ? row.source_verified : null,
     discussionUrl: row.discussion_url ?? null,
     websiteUrl: row.website_url ?? null,
+    replacing: replacementMap.get(projectId) ?? [],
   };
 }
 
@@ -416,12 +484,17 @@ export async function getSimilarProjects(project: Project, limit = 4): Promise<P
   const projectIds = data
     .map((row) => (typeof row.id === "string" ? row.id : String(row.id ?? "")))
     .filter(Boolean);
-  const normalizedTagMap = await loadProjectTagNamesByProjectId(projectIds);
+  const normalizedTagResult = await loadProjectTagNamesByProjectId(projectIds);
 
   const scored = data
     .map((row) => {
       const candidateId = typeof row.id === "string" ? row.id : String(row.id ?? "");
-      const candidate = mapProjectRow(row, normalizedTagMap.get(candidateId));
+      const candidate = mapProjectRow(row, resolveProjectTags(
+        candidateId,
+        row.tags,
+        normalizedTagResult.tagNamesByProjectId,
+        normalizedTagResult.readSucceeded
+      ));
       const similarity = scoreSimilarProject(project, candidate);
       return { candidate, ...similarity };
     })
@@ -440,7 +513,12 @@ export async function getSimilarProjects(project: Project, limit = 4): Promise<P
   return data
     .map((row) => {
       const candidateId = typeof row.id === "string" ? row.id : String(row.id ?? "");
-      return mapProjectRow(row, normalizedTagMap.get(candidateId));
+      return mapProjectRow(row, resolveProjectTags(
+        candidateId,
+        row.tags,
+        normalizedTagResult.tagNamesByProjectId,
+        normalizedTagResult.readSucceeded
+      ));
     })
     .filter((candidate) => candidate.slug !== project.slug)
     .slice(0, limit);
@@ -490,5 +568,6 @@ function mapProjectRow(row: Record<string, unknown>, explicitTags?: string[]): P
       typeof row.source_verified === "boolean" ? row.source_verified : null,
     discussionUrl: typeof row.discussion_url === "string" ? row.discussion_url : null,
     websiteUrl: typeof row.website_url === "string" ? row.website_url : null,
+    replacing: [],
   };
 }

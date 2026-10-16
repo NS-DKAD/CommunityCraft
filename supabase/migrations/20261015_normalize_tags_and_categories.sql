@@ -81,8 +81,8 @@ CREATE TABLE IF NOT EXISTS public.project_tags (
 CREATE INDEX IF NOT EXISTS idx_tags_slug ON public.tags(slug);
 CREATE INDEX IF NOT EXISTS idx_project_tags_tag_id ON public.project_tags(tag_id);
 
--- 6. Build a single global mapping from each distinct historical tag name to a canonical slug.
---    This mapping is reused for tag creation, project-tag associations and final validation.
+-- 6. Build a mapping for historical values so existing catalog entries can be matched
+--    consistently. Historical values are not approved catalog entries by themselves.
 CREATE TEMP TABLE normalized_tag_map (
   raw_tag TEXT PRIMARY KEY,
   slug TEXT NOT NULL
@@ -128,22 +128,10 @@ BEGIN
   END IF;
 END $$;
 
--- 8. Create canonical tags from the single global mapping.
-INSERT INTO public.tags (name, slug, created_at)
-SELECT n.raw_tag, n.slug, timezone('utc'::text, now())
-FROM normalized_tag_map n
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM public.tags t
-  WHERE t.slug = n.slug
-)
-AND NOT EXISTS (
-  SELECT 1
-  FROM public.tags t
-  WHERE t.name = n.raw_tag AND t.slug = n.slug
-);
+-- 8. Historical values do not create catalog entries; unapproved values remain in projects.tags.
+-- Intentionally no INSERT into public.tags from the historical values.
 
--- 9. Create project-tag associations using the same exact mapping.
+-- 9. Create associations only when a historical value exactly matches an existing canonical entry.
 INSERT INTO public.project_tags (project_id, tag_id)
 SELECT DISTINCT
   p.id AS project_id,
@@ -162,7 +150,7 @@ WHERE u.raw_tag IS NOT NULL
     WHERE pt.project_id = p.id
       AND pt.tag_id = t.id
   );
--- 10. Preserve historical names as aliases without merging different tags.
+-- 10. Preserve exact historical names as aliases only for existing canonical entries.
 INSERT INTO public.tag_aliases (alias, tag_id)
 SELECT DISTINCT
   trim(raw_tag) AS alias,
@@ -178,7 +166,7 @@ AND NOT EXISTS (
   WHERE a.alias = trim(raw_tag)
 );
 
--- 11. Final validation: all expected historical tags and exact project-tag pairs must be present.
+-- 11. Final validation: every historical value that matched an existing canonical entry must have its association.
 DO $$
 DECLARE
   missing_pair_count integer;
@@ -238,5 +226,6 @@ COMMIT;
 -- NOTE:
 -- - The legacy public.projects.tags TEXT[] column is preserved intentionally.
 -- - No existing rows are deleted or overwritten.
+-- - Historical values without an approved catalog entry remain only in projects.tags.
 -- - The migration refuses to proceed on ambiguous mappings, blank values, or missing expected associations.
 -- - The script is idempotent: repeated execution adds no duplicate rows and preserves the same mapping.

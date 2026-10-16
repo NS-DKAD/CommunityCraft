@@ -2,10 +2,14 @@ import {
   validateSubmissionInput,
   slugFromGitHubFullName,
 } from "@/lib/submission";
+import { findUnknownApplicationIds, validateReplacementInput } from "@/lib/replacements";
+import { getPersistenceHttpOutcome, persistProjectWithReplacements } from "@/lib/project-persistence";
+import { resolveSubmissionTags } from "@/lib/tags";
 import {
   getProjectBySlug,
   matchesProjectCategory,
   matchesProjectQuery,
+  resolveProjectTags,
 } from "@/lib/projects";
 import { getSupabaseClient } from "@/lib/supabase/client";
 
@@ -40,6 +44,159 @@ describe("matchesProjectQuery", () => {
     expect(matchesProjectQuery(project, "solo")).toBe(true);
     expect(matchesProjectQuery(project, "rendering")).toBe(false);
   });
+
+  test("finds projects by a replaced application name without relying on tags or description", () => {
+    const project = {
+      name: "Pixel Studio",
+      author: "A developer",
+      description: "An editor for creators.",
+      tags: [],
+      replacing: [{ applicationId: "app-1", applicationName: "Photoshop", applicationSlug: "photoshop", level: "Partial" as const }],
+    };
+    expect(matchesProjectQuery(project, "photoshop")).toBe(true);
+  });
+});
+
+describe("replacement application validation", () => {
+  test("accepts multiple applications with each supported replacement level", () => {
+    const result = validateReplacementInput([
+      { applicationId: "app-1", level: "Complete" },
+      { applicationId: "app-2", level: "Partial" },
+      { applicationId: "app-3", level: "Specialized" },
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.replacements).toHaveLength(3);
+  });
+
+  test("allows no replacements for existing projects and submissions", () => {
+    expect(validateReplacementInput(undefined)).toEqual({ valid: true, replacements: [] });
+    const project = { name: "Legacy project", author: "Creator", description: "Existing description", tags: [] };
+    expect(matchesProjectQuery(project, "photoshop")).toBe(false);
+  });
+
+  test("rejects duplicate and malformed application entries", () => {
+    expect(validateReplacementInput([
+      { applicationId: "app-1", level: "Complete" },
+      { applicationId: "app-1", level: "Partial" },
+    ]).valid).toBe(false);
+    expect(validateReplacementInput([{ applicationId: "app-1", level: "Unknown" }]).valid).toBe(false);
+  });
+
+  test("rejects application IDs that are not present in the shared catalog", () => {
+    const result = validateReplacementInput([{ applicationId: "unknown-app", level: "Partial" }]);
+    expect(result.valid).toBe(true);
+    expect(findUnknownApplicationIds(result.replacements, ["known-app"])).toEqual(["unknown-app"]);
+  });
+});
+
+describe("normalized tag resolution", () => {
+  const canonicalTags = [
+    { id: "tag-1", name: "Shaders", slug: "shaders" },
+    { id: "tag-2", name: "Voxel Art", slug: "voxel-art" },
+  ];
+  const aliases = [{ alias: "voxels", tagId: "tag-2" }];
+
+  test("resolves canonical slugs and aliases to canonical tag IDs", () => {
+    expect(resolveSubmissionTags(["shaders", "voxels"], canonicalTags, aliases)).toMatchObject({
+      valid: true,
+      tags: [canonicalTags[0], canonicalTags[1]],
+      unknownTags: [],
+    });
+  });
+
+  test("rejects tags that are not in the canonical catalog or its aliases", () => {
+    expect(resolveSubmissionTags(["user-invented"], canonicalTags, aliases)).toMatchObject({
+      valid: false,
+      tags: [],
+      unknownTags: ["user-invented"],
+    });
+  });
+
+  test("deduplicates canonical tags selected through more than one alias", () => {
+    expect(resolveSubmissionTags(["voxel-art", "voxels"], canonicalTags, aliases).tags).toEqual([canonicalTags[1]]);
+  });
+
+  test("rejects an ambiguous alias instead of resolving it inconsistently", () => {
+    expect(resolveSubmissionTags(
+      ["voxels"],
+      canonicalTags,
+      [...aliases, { alias: "VOXELS", tagId: "tag-1" }]
+    )).toMatchObject({ valid: false, unknownTags: ["voxels"] });
+  });
+});
+
+describe("persistProjectWithReplacements", () => {
+  const project = { id: "project-1", slug: "example-project" };
+  const replacements = [{ applicationId: "app-1", level: "Partial" as const }];
+
+  test("rolls back the new project when replacement saving fails", async () => {
+    const deleteProject = jest.fn().mockResolvedValue({ deleted: true, error: null });
+    const result = await persistProjectWithReplacements({
+      replacements,
+      insertProject: jest.fn().mockResolvedValue({ project, error: null }),
+      insertReplacements: jest.fn().mockResolvedValue({ error: "relation insert failed" }),
+      deleteProject,
+    });
+    expect(result.kind).toBe("rolled-back");
+    expect(getPersistenceHttpOutcome(result)).toMatchObject({ status: 500, received: false });
+    expect(deleteProject).toHaveBeenCalledWith(project.id);
+  });
+
+  test("rolls back a project when normalized tag associations cannot be saved", async () => {
+    const deleteProject = jest.fn().mockResolvedValue({ deleted: true, error: null });
+    const insertRelations = jest.fn().mockResolvedValue({ error: "tag relation insert failed" });
+    const result = await persistProjectWithReplacements({
+      replacements: [],
+      hasTagAssociations: true,
+      insertProject: jest.fn().mockResolvedValue({ project, error: null }),
+      insertReplacements: insertRelations,
+      deleteProject,
+    });
+    expect(insertRelations).toHaveBeenCalledWith(project.id, []);
+    expect(result.kind).toBe("rolled-back");
+    expect(deleteProject).toHaveBeenCalledWith(project.id);
+  });
+
+  test("confirms receipt without inviting a duplicate when cleanup also fails", async () => {
+    const result = await persistProjectWithReplacements({
+      replacements,
+      insertProject: jest.fn().mockResolvedValue({ project, error: null }),
+      insertReplacements: jest.fn().mockResolvedValue({ error: "relation insert failed" }),
+      deleteProject: jest.fn().mockResolvedValue({ deleted: false, error: "delete failed" }),
+    });
+    expect(result).toEqual({
+      kind: "saved-with-incomplete-relations",
+      project,
+      error: "relation insert failed",
+      cleanupError: "delete failed",
+    });
+    expect(getPersistenceHttpOutcome(result)).toMatchObject({ status: 201, received: true });
+    expect(getPersistenceHttpOutcome(result).message).toMatch(/Please do not submit it again/);
+  });
+
+  test("still confirms receipt when cleanup throws a network error", async () => {
+    const result = await persistProjectWithReplacements({
+      replacements,
+      insertProject: jest.fn().mockResolvedValue({ project, error: null }),
+      insertReplacements: jest.fn().mockResolvedValue({ error: "relation insert failed" }),
+      deleteProject: jest.fn().mockRejectedValue(new Error("connection lost")),
+    });
+    expect(result.kind).toBe("saved-with-incomplete-relations");
+    expect(result.cleanupError).toBe("connection lost");
+    expect(getPersistenceHttpOutcome(result)).toMatchObject({ status: 201, received: true });
+  });
+
+  test("does not try to delete an existing project when the initial insert fails", async () => {
+    const deleteProject = jest.fn();
+    const result = await persistProjectWithReplacements({
+      replacements,
+      insertProject: jest.fn().mockResolvedValue({ project: null, error: "project insert failed" }),
+      insertReplacements: jest.fn(),
+      deleteProject,
+    });
+    expect(result.kind).toBe("failed-before-save");
+    expect(deleteProject).not.toHaveBeenCalled();
+  });
 });
 
 describe("matchesProjectCategory", () => {
@@ -47,6 +204,20 @@ describe("matchesProjectCategory", () => {
     expect(matchesProjectCategory({ category: "Rendering & Assets" }, "All")).toBe(true);
     expect(matchesProjectCategory({ category: "Games" }, "Games")).toBe(true);
     expect(matchesProjectCategory({ category: "Website" }, "Mods")).toBe(false);
+  });
+});
+
+describe("project tag catalog display", () => {
+  test("does not publish legacy tags when normalized reads succeed without associations", () => {
+    expect(resolveProjectTags("project-1", ["test", "mcp"], new Map(), true)).toEqual([]);
+  });
+
+  test("uses normalized canonical names when associations exist", () => {
+    expect(resolveProjectTags("project-1", ["legacy"], new Map([["project-1", ["CAD"]]]), true)).toEqual(["CAD"]);
+  });
+
+  test("falls back to legacy tags only when normalized schema reads fail", () => {
+    expect(resolveProjectTags("project-1", ["kept-legacy"], new Map(), false)).toEqual(["kept-legacy"]);
   });
 });
 
@@ -263,12 +434,17 @@ describe("getProjectBySlug", () => {
     const selectTags = jest.fn().mockReturnValue({ in: inTags });
     const fromTags = jest.fn().mockReturnValue({ select: selectTags });
 
+    const inReplacements = jest.fn().mockResolvedValue({ data: [], error: null });
+    const selectReplacements = jest.fn().mockReturnValue({ in: inReplacements });
+    const fromReplacements = jest.fn().mockReturnValue({ select: selectReplacements });
+
     const eqBySlug = jest.fn().mockReturnValue({ maybeSingle });
     const eqApproved = jest.fn().mockReturnValue({ eq: eqBySlug });
     const select = jest.fn().mockReturnValue({ eq: eqApproved });
     const from = jest.fn((table: string) => {
       if (table === "project_tags") return fromProjectTags();
       if (table === "tags") return fromTags();
+      if (table === "project_replacements") return fromReplacements();
       return { select };
     });
 
@@ -277,6 +453,7 @@ describe("getProjectBySlug", () => {
     const result = await getProjectBySlug("artcraft-studio-tools");
 
     expect(result).not.toBeNull();
+    expect(result?.tags).toEqual([]);
     expect(from).toHaveBeenCalledWith("projects_with_stats");
     expect(select).toHaveBeenCalledWith("*");
     expect(eqApproved).toHaveBeenCalledWith("is_approved", true);
