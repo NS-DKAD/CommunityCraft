@@ -66,23 +66,21 @@ The secure administration panel is implemented locally in this checkout. Its cur
 - editing the display label and stored color metadata of existing Discover tags, without creating tags or changing canonical slugs;
 - managing the display label, public color, active state, and creation of project categories through the admin panel.
 
-Security: the panel uses Supabase Auth with Discord OAuth and a separate explicit UUID allowlist. Server routes verify the user and admin role; SQL RLS denies unauthenticated/admin-unlisted reads and writes, while mutation RPCs independently check the allowlist. Project edits and status changes append an audit event atomically. Discord/provider configuration and the first admin allowlist entry still require manual setup; see `PROJECT_CONTEXT.md` and the steps below.
+Security: the panel uses Supabase Auth with Discord OAuth and a separate explicit UUID allowlist. Server routes verify the user and admin role; SQL RLS denies unauthenticated/admin-unlisted reads and writes, while mutation RPCs independently check the allowlist. Project edits and status changes append an audit event atomically. The owner reports that Discord OAuth, the first admin allowlist entry, collaboration/RLS checks, Discover tag navigation, `20261018` tag presentation, `20261019` category catalog checks, and `20261020` project-report admin access are done. The agent did not rerun remote SQL.
 
 The panel tracks collaboration requests through the schema's existing `new`, `reviewed`, `replied` and `dismissed` states. Public collaboration requests and project reports are confirmed only after database insertion succeeds. If the optional email notification fails after a collaboration request is saved, the API still returns success and points the visitor to the fact that moderators can review the saved item in the admin inbox; the server logs the delivery status without logging contact details. Similar-project recommendations are implemented.
 
-Project reports already have a persistence table. A dedicated admin review view, status changes and audit events are implemented locally, but require the new migration `supabase/migrations/20261020_admin_project_reports.sql`. This migration has not been run remotely by the agent. After reviewing the SQL, run it manually in Supabase SQL Editor; then verify an allowlisted admin can read reports, update a status, and see the audit entry. Public and non-admin roles receive no report read access.
+Project edits, tag appearance, and category presentation keep **drafts** while switching records or admin sections. Unsaved items are marked. **Save all** writes remaining drafts and never reports a global success if any write failed; failed items stay drafted with per-record errors. Leaving `/admin` asks for confirmation only when drafts would actually be lost. There is no hard delete in this panel.
 
-The admin page loads the newest 500 projects, collaboration requests, and (after the project-report migration is applied) project reports. It shows a notice at the limit; pagination is a later scaling improvement. Tags and Replacing entries are shown read-only in project review. Existing canonical tags can be relabeled/recolored in the Discover tags panel.
-
-The migration `supabase/migrations/20261018_admin_discover_tag_presentation.sql` adds optional `display_name` and `color` presentation fields and an allowlist-protected RPC. It depends on `20261017_secure_admin_panel.sql`, does not change tag slugs or project associations, and the owner reports that it was applied. The agent did not run it; validate the tag editor in the UI. Public tag filters only show active canonical tags associated with projects returned by the approved public catalog.
+The admin page loads the newest 500 projects, collaboration requests, and project reports, and shows a notice at the limit. Pagination beyond that is tracked in `requested_Features.md`. Tags and Replacing entries are shown read-only in project review. Existing canonical tags can be relabeled/recolored in the Discover tags panel. Public tag filters only show active canonical tags associated with projects returned by the approved public catalog.
 
 ### Admin-managed project categories
 
 The five current MVP categories are `Software`, `Website`, `Plugin`, `Games` and `Mods`. `By ArtCraft` remains a reserved editorial status and is never a category. The existing `projects.category` column remains text so existing project rows are not rewritten. Earlier schema migrations also permitted `Tools`, `Shaders`, `Rendering & Assets` and `Libraries`; the new catalog migration keeps those entries inactive for history while new submissions can choose only active catalog entries.
 
-The migration `supabase/migrations/20261019_admin_project_categories.sql` adds `project_categories`, seeds the five active categories plus the four inactive historical values, protects category writes with admin-only RPCs, and updates the project-admin RPC to validate catalog entries. It replaces the old fixed category check with a trigger that rejects values absent from the catalog. It stops without committing if existing project values are blank, reserved, or outside the nine previously supported categories. No project category or association is deleted or rewritten. The owner reports that this migration was applied successfully (“Success. No rows returned”); the post-migration data and UI checks are still pending.
+The migration `supabase/migrations/20261019_admin_project_categories.sql` adds `project_categories`, seeds the five active categories plus the four inactive historical values, protects category writes with admin-only RPCs, and updates the project-admin RPC to validate catalog entries. It replaces the old fixed category check with a trigger that rejects values absent from the catalog. It stops without committing if existing project values are blank, reserved, or outside the nine previously supported categories. No project category or association is deleted or rewritten. The owner reports that this migration was applied successfully (“Success. No rows returned”) and that post-migration data/UI checks are done. The agent did not run the SQL.
 
-Use this read-only query to verify the actual project category distribution after the reported migration:
+Optional read-only query if you need to re-check the project category distribution:
 
 ```sql
 SELECT category, count(*) AS project_count
@@ -91,7 +89,7 @@ GROUP BY category
 ORDER BY category;
 ```
 
-The owner reports `20261019_admin_project_categories.sql` applied. The owner also reports `20261018_admin_discover_tag_presentation.sql` applied; the agent did not run either migration. Verify the category catalog with this additional read-only query:
+The owner reports `20261019_admin_project_categories.sql` and `20261018_admin_discover_tag_presentation.sql` applied and checked. The agent did not run either migration. Optional catalog query:
 
 ```sql
 SELECT name, slug, display_name, color, is_active, sort_order
@@ -111,8 +109,8 @@ Only allowlisted admins can create categories or change their labels, colors, an
 1. In the Discord Developer Portal, create an OAuth application and add the Supabase Auth callback URL shown in **Supabase Dashboard → Authentication → Sign In / Providers → Discord**.
 2. Enter the Discord client ID and secret in that Supabase Discord provider. Keep the secret in Supabase only; never add it to this repository or browser environment.
 3. In **Supabase Dashboard → Authentication → URL Configuration**, add the application callback URL `http://localhost:3000/auth/callback` to the redirect allowlist (use the actual local port if 3000 is occupied, and add the exact production URL when deploying).
-4. The owner reports that `supabase/migrations/20261017_secure_admin_panel.sql` and `supabase/migrations/20261018_admin_discover_tag_presentation.sql` have been applied manually. The agent did not run SQL remotely. Validate the new tag controls in the UI.
-5. Open `/admin/login` and sign in with the intended Discord account. Signing in alone gives no admin rights; the panel will show that account's Supabase Auth UUID.
+4. The owner reports that `supabase/migrations/20261017_secure_admin_panel.sql` and `supabase/migrations/20261018_admin_discover_tag_presentation.sql` have been applied manually, and that the tag editor UI is validated. The agent did not run SQL remotely.
+5. Open `/admin/login` and sign in with the intended Discord account. Signing in alone gives no admin rights; the panel will show that account's Supabase Auth UUID. The owner reports this first-time allowlist setup is already done.
 6. In SQL Editor, add only that trusted UUID to the allowlist:
 
    ```sql
@@ -136,7 +134,9 @@ Never commit `.env.local` or other secrets. Service-role keys must remain server
 - `supabase/migrations/` — database migrations.
 - `supabase/seed.sql` — seed data.
 - `AGENTS.md` — persistent instructions for the coding agent.
-- `PROJECT_CONTEXT.md` — current project state and prioritized roadmap.
+- `PROJECT_CONTEXT.md` — current project state and remaining in-scope tasks.
+- `requested_Features.md` — out-of-MVP requests (record and refuse unless Danny insists).
+- `docs/mvp-scope.md` — MVP mission and in-scope capabilities.
 
 ## Product principles
 

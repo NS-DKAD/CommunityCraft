@@ -17,13 +17,11 @@ CommunityCraft est un annuaire communautaire indépendant et un espace de décou
 - Les dépôts et fichiers des créations restent hébergés chez leurs auteurs, principalement sur GitHub.
 - Le site stocke les fiches et données de coordination, pas les fichiers des projets.
 - Les visiteurs peuvent consulter le catalogue sans compte.
-- Les comptes et la gestion de propriété des projets sont des étapes ultérieures ; ne les présente pas comme déjà implémentés.
-- Les métadonnées publiques GitHub pourront être actualisées automatiquement lorsque cela sera raisonnablement possible.
 - Les coordonnées de collaboration ne doivent être publiées que si elles ont été explicitement fournies à cette fin.
 - La modération est nécessaire pour limiter le spam, les abus et les contenus malveillants.
 - Les badges officiels ou vérifiés ne peuvent être attribués que par des responsables autorisés.
-- L'analyse des dépôts par IA est une fonctionnalité future, réservée notamment aux besoins de la Team ArtCraft.
 - Le site doit rester indépendant et ne pas prétendre être officiel sans autorisation.
+- Les demandes hors MVP (comptes/propriété, import GitHub, bot Discord, analyse IA, etc.) sont dans `requested_Features.md` : les noter et les refuser, sauf si Danny insiste.
 
 ## 3. Principes techniques
 
@@ -37,7 +35,7 @@ CommunityCraft est un annuaire communautaire indépendant et un espace de décou
 - Ne crée pas de système d'authentification maison si une solution éprouvée est adaptée.
 - Ne stocke jamais de secrets dans le code source ou dans Git.
 
-La stack est Next.js, TypeScript, Tailwind CSS, Supabase/PostgreSQL et, plus tard si nécessaire, l'API GitHub. Respecte cette direction sauf problème technique concret justifiant une modification.
+La stack est Next.js, TypeScript, Tailwind CSS et Supabase/PostgreSQL. Respecte cette direction sauf problème technique concret justifiant une modification. L'API GitHub n'est pas dans le MVP ; voir `requested_Features.md`.
 
 ## 4. Autonomie d'exécution
 
@@ -96,10 +94,10 @@ Ne remplace jamais une tâche bloquée par une refonte non demandée.
 
 - Les catégories MVP sont `Software`, `Website`, `Plugin`, `Games` et `Mods`.
 - « By ArtCraft » est un badge/statut éditorial contrôlé par une personne autorisée, pas une catégorie sélectionnable par le public.
-- Les tags doivent être cohérents, réutilisables et dédupliqués. Les utilisateurs doivent choisir des tags existants ; ne pas autoriser la création publique de tags arbitraires sans décision produit explicite.
+- Les tags doivent être cohérents, réutilisables et dédupliqués. Les utilisateurs choisissent des tags existants. La création publique de tags arbitraires est hors MVP (`requested_Features.md`).
 - Les alias doivent pointer vers un tag canonique. Ne pas fusionner ou supprimer des tags automatiquement si cela peut perdre des associations.
-- Le schéma normalisé `tags`, `tag_aliases`, `project_tags` a été préparé dans `supabase/migrations/20261015_normalize_tags_and_categories.sql`. Vérifie si la migration a réellement été appliquée avant d'affirmer que les tables existent sur Supabase.
-- Tant que la couche applicative n'a pas été migrée, `projects.tags` reste une source legacy. Ne prétends pas que le catalogue lit/écrit les tables normalisées sans vérifier le code.
+- Distingue toujours « migration écrite », « migration appliquée à Supabase » et « code utilisant le schéma ». Le propriétaire rapporte les migrations tags/catégories/admin appliquées ; l'agent ne les rejoue pas. Ne pas relancer `20261015_normalize_tags_and_categories.sql`.
+- Le code applicatif lit/écrit `project_tags` pour les nouvelles soumissions. `projects.tags` reste une colonne legacy de compatibilité. Le repli vers cette colonne n'a lieu que si la lecture normalisée échoue.
 
 ## 9. Tests et vérification
 
@@ -114,24 +112,20 @@ Après chaque modification significative :
 
 ## 10. Documentation et gestion du dépôt
 
-- Maintiens `PROJECT_CONTEXT.md` à jour après une évolution significative : état réel des fonctionnalités, migrations créées/appliquées si connu, vérifications, limites et prochaines étapes.
-- Maintiens `README.md` cohérent avec les commandes et fonctionnalités réellement présentes.
-- Utilise `AGENTS.md` comme consignes permanentes ; modifie-le seulement pour une règle durable, pas pour chaque tâche ponctuelle.
+- Après **chaque** tâche, mets à jour les guides d'état : au minimum `PROJECT_CONTEXT.md`, et `README.md` si les commandes ou fonctionnalités visibles changent. Mets à jour `requested_Features.md` si un item hors MVP apparaît. Modifie `AGENTS.md` seulement pour une règle durable.
+- Maintiens `PROJECT_CONTEXT.md` à jour : état réel, migrations écrites/appliquées/utilisées si connu, vérifications, limites et prochaines étapes **in-scope**.
 - Distingue toujours « migration écrite », « migration appliquée à Supabase » et « code applicatif utilisant le nouveau schéma ».
 - Respecte les modifications existantes de l'utilisateur. N'écrase pas de travail non validé.
 - Ne lance pas de commandes Git destructrices.
 - Ne crée pas de commit ou ne pousse pas de changements vers un dépôt distant sans demande explicite.
 
-## 11. Priorités produit
+## 11. Périmètre MVP et priorités
 
-Respecte cet ordre, sauf instruction plus récente de l'utilisateur :
+Reste dans le scope MVP (`docs/mvp-scope.md` + ce qui est nécessaire pour qu'il soit opérationnel). Consulte `PROJECT_CONTEXT.md` pour la liste opérationnelle restante (P0/P1/P2).
 
-1. Terminer les tags/catégories : migration vérifiée, liste initiale de tags pertinents, et intégration réelle du catalogue et du formulaire avec `project_tags`.
-2. Terminer les demandes de collaboration : persistance fiable, confirmation correcte côté utilisateur et notification administrateur robuste.
-3. Ajouter les projets similaires.
-4. Reporter l'import de masse GitHub jusqu'à ce que les étapes précédentes soient solides.
+Les étapes documentées 1–7 (collab/RLS, Discover tags, migration `20261020`, contrôles `20261019`, éditeur tags `20261018`, setup admin OAuth, ne pas relancer `20261015`) sont **rapportées faites par le propriétaire**. Ne pas les rejouer (aucun SQL distant).
 
-Ne démarre pas les projets similaires ou l'import de masse pendant la finalisation des tags et des demandes de collaboration.
+Toute feature hors MVP va dans `requested_Features.md` : la noter et la **refuser**, sauf si Danny insiste.
 
 ## 12. Format des réponses
 
