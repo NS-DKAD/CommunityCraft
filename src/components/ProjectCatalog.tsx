@@ -26,6 +26,8 @@ export function ProjectCatalog({
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<"All" | ProjectCategory>("All");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PROJECTS_PER_PAGE = 12;
 
   const categoryOptions = useMemo(() => buildPublicCategoryOptions(initialProjects), [initialProjects]);
 
@@ -44,10 +46,24 @@ export function ProjectCatalog({
     });
   }, [initialProjects, searchQuery, selectedCategory, selectedTag]);
 
+  // Reset to first page when any search or filter criteria changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, selectedTag]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedProjects = useMemo(() => {
+    const start = (safePage - 1) * PROJECTS_PER_PAGE;
+    return filteredProjects.slice(start, start + PROJECTS_PER_PAGE);
+  }, [filteredProjects, safePage]);
+
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedCategory("All");
     setSelectedTag(null);
+    setCurrentPage(1);
   };
 
   return (
@@ -187,11 +203,70 @@ export function ProjectCatalog({
         )}
 
         {filteredProjects.length > 0 ? (
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              {paginatedProjects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <nav aria-label="Catalog pagination" className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-[var(--border)] pt-6 text-sm">
+                <p className="text-xs text-[var(--text-muted)]">
+                  Page <span className="font-medium text-[var(--text)]">{safePage}</span> of <span className="font-medium text-[var(--text)]">{totalPages}</span>
+                  <span className="ml-2">({filteredProjects.length} total projects)</span>
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={safePage <= 1}
+                    className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-medium text-[var(--text-soft)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Previous page"
+                  >
+                    ← Previous
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((page) => page === 1 || page === totalPages || Math.abs(page - safePage) <= 1)
+                      .map((page, idx, array) => {
+                        const prev = array[idx - 1];
+                        const showEllipsis = prev && page - prev > 1;
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsis && <span className="px-1 text-xs text-[var(--text-muted)]">…</span>}
+                            <button
+                              type="button"
+                              onClick={() => setCurrentPage(page)}
+                              aria-current={page === safePage ? "page" : undefined}
+                              className={`h-8 w-8 rounded-lg border text-xs font-medium transition-colors ${
+                                page === safePage
+                                  ? "border-[var(--border-strong)] bg-[var(--text)] text-[var(--bg)]"
+                                  : "border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={safePage >= totalPages}
+                    className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-1.5 text-xs font-medium text-[var(--text-soft)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface)] disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Next page"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </nav>
+            )}
+          </>
         ) : (
           <div className="rounded-[24px] border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-12 text-center text-[var(--text-soft)]">
             No projects match the current filters.
