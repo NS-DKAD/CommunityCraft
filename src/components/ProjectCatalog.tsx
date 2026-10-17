@@ -150,7 +150,7 @@ export function ProjectCatalog({
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                   isSelected
                     ? "border-[var(--border-strong)] bg-[var(--text)] text-[var(--bg)]"
-                    : "border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
+                    : "border-[var(--border)] bg-[var(--surface-strong)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
                 }`}
                 style={!isSelected ? getTintedChipStyle(categoryChipColor(category, option.color)) : undefined}
               >

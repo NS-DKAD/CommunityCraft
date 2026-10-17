@@ -1,4 +1,4 @@
-import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Header } from "@/components/Header";
@@ -10,6 +10,37 @@ export const instant = false;
 
 interface ProjectDetailPageProps {
   params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: ProjectDetailPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const project = await getProjectBySlug(slug);
+
+  if (!project) {
+    return {
+      title: "Project Not Found — CommunityCraft",
+      description: "The requested ArtCraft project could not be found.",
+    };
+  }
+
+  const title = `${project.name} — CommunityCraft`;
+  const description = project.description || `Explore ${project.name} by ${project.author} on CommunityCraft.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      siteName: "CommunityCraft",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
+  };
 }
 
 export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {

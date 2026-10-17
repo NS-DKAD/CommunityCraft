@@ -42,9 +42,9 @@ describe("category catalog", () => {
 describe("themed custom chip colors", () => {
   test("uses a subtle theme-aware tint and foreground instead of replacing the chip surface with the selected color", () => {
     const style = getTintedChipStyle("#000000");
-    expect(style?.backgroundColor).toContain("16%, var(--surface-strong)");
-    expect(style?.borderColor).toContain("54%, var(--border)");
-    expect(style?.color).toContain("78%, #000000");
+    expect(style?.backgroundColor).toContain("14%, var(--surface-strong)");
+    expect(style?.borderColor).toContain("65%, var(--border)");
+    expect(style?.color).toContain("88%, #ffffff");
   });
 
   test("uses neutral component styles when no valid custom color exists", () => {

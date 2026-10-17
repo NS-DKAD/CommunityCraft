@@ -173,7 +173,7 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
 
       <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.22)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-medium text-[var(--text-soft)]" style={getTintedChipStyle(categoryChipColor(project.category, project.categoryColor))}>
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-semibold" style={getTintedChipStyle(categoryChipColor(project.category, project.categoryColor))}>
             {project.categoryLabel || project.category}
           </span>
           {project.status ? (

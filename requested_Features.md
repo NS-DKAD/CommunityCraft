@@ -27,5 +27,8 @@ Le MVP est défini par `docs/mvp-scope.md` plus ce qui est indispensable pour qu
 | Actions groupées (sélection multi-cartes), archivage de masse, suppression définitive | `PROJECT_CONTEXT.md` | Reporté ; à autoriser. Préférer l’archivage réversible. Pas de suppression dure sans confirmation, aperçu d’impact, admin et audit |
 | Écran d’administration du catalogue d’applications Replacing | `PROJECT_CONTEXT.md` | Reporté ; ajouts via SQL contrôlé |
 | Toast / barre d’action globale sur le **site public** (hors barre admin de sauvegarde groupée) | `PROJECT_CONTEXT.md` | Reporté (confort) |
+| Possibilité de réactiver d'anciens fils archivés pour éviter les doublons | Demande Danny (2026-10-17) | Reporté / hors MVP (threads/discussions communautaires) |
+| Photos de profil sur les cartes à côté du nom de l'auteur | Demande Danny (2026-10-17) | Reporté / hors MVP (avatars distants/GitHub) |
+| Noms des collaborateurs principaux sur les cartes (en plus du fondateur) | Demande Danny (2026-10-17) | Reporté / hors MVP (gestion d'équipe détaillée sur les cartes) |
 
 Ne pas traiter ces items comme des tâches MVP courantes.

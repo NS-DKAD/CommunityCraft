@@ -17,12 +17,12 @@ export function categoryChipColor(category: string, customColor?: string | null)
   return DEFAULT_CATEGORY_COLORS[category] ?? null;
 }
 
-/** Uses the saved hue as a tint while keeping text close to the active theme's foreground. */
+/** Uses the saved hue as a tint, with border and text clearly matching the category color while remaining legible on dark surfaces. */
 export function getTintedChipStyle(color: string | null | undefined): CSSProperties | undefined {
   if (!color || !/^#[0-9a-fA-F]{6}$/.test(color)) return undefined;
   return {
-    backgroundColor: `color-mix(in srgb, ${color} 16%, var(--surface-strong))`,
-    borderColor: `color-mix(in srgb, ${color} 54%, var(--border))`,
-    color: `color-mix(in srgb, var(--text) 78%, ${color})`,
+    backgroundColor: `color-mix(in srgb, ${color} 14%, var(--surface-strong))`,
+    borderColor: `color-mix(in srgb, ${color} 65%, var(--border))`,
+    color: `color-mix(in srgb, ${color} 88%, #ffffff)`,
   };
 }

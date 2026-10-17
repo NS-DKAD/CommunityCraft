@@ -78,21 +78,23 @@ Sélectionnables : `Software`, `Website`, `Plugin`, `Games` et `Mods`.
 - Pas de suppression dure.
 - Barre d'état en bas du panel admin pour le statut groupé (succès partiel, échecs nommés). Ne pas remplacer les erreurs de formulaire par un toast éphémère.
 
-**P2 — confort in-scope**
+**P2 — confort in-scope & Préparation production (exécuté le 2026-10-17 selon l'ordre 1, 3, 2, 4)**
 
-- Vérifier la lisibilité des puces catégories vs tags (couleurs déjà teintées via `getTintedChipStyle`) sans changer les couleurs canoniques par défaut de façon arbitraire.
-- Pagination admin au-delà de 500 : **hors cette liste** → `requested_Features.md`.
+- **Étape 1 (Production)** : En-têtes HTTP de sécurité configurés dans `next.config.ts` (CSP/X-Frame-Options/XSS/Permissions-Policy) et documentation complète des variables dans `.env.example`.
+- **Étape 3 (SEO & Visibilité)** : Métadonnées OpenGraph dynamiques sur `/projects/[slug]`, `robots.txt` et `sitemap.xml` dynamiques générés, et texte des puces catégories harmonisé avec la couleur de la bordure.
+- **Étape 2 (Données & Cohérence)** : Données de repli démo réalignées sur les 5 catégories MVP actives (`Software`, `Website`, `Plugin`, `Games`, `Mods`) et les tags canoniques approuvés (`3d-modeling`, `cad`, `brep`, `wasm`, `egui`, `web`, `step`).
+- **Étape 4 (Tests Parcours Utilisateur)** : Suite `user-journey.test.ts` ajoutée pour valider le parcours complet (consultation catalogue, repli démo, recherche, validation des requêtes de collaboration et des signalements).
 
-Hors MVP (import GitHub, bot Discord, comptes, IA, téléchargement plugins, tags libres, By ArtCraft comme catégorie, bulk delete, toast site public) : `requested_Features.md`.
+Idées hors MVP notées dans `requested_Features.md` : réactivation de vieux threads archivés, photos de profil sur les cartes, liste complète des collaborateurs en plus de l'auteur.
 
 ## 7. Vérifications
 
 Dernières vérifications exécutées (2026-10-17) :
 
 - `npx tsc --noEmit` : OK (0 erreur de types).
-- `npm run lint` : OK (0 erreur, 2 warnings préexistants).
-- `npm test` : 6 suites, 65 tests passés avec succès (dont tests unitaires des brouillons admin `workspace-drafts.test.ts`).
-- `npx next build --webpack` : **SUCCÈS CONFIRMÉ** (compilation 100 % réussie, 12 pages générées en static/PPR/dynamic sans aucune erreur).
+- `npm run lint` : OK (0 erreur, 1 warning restant sur paramètre d'erreur `_err`).
+- `npm test` : 7 suites, 72 tests passés avec succès (+ suite `user-journey.test.ts`).
+- `npx next build --webpack` : **SUCCÈS CONFIRMÉ** (14 pages/routes générées dont `robots.txt` et `sitemap.xml`, 0 erreur).
 
 Les contrôles locaux confirment l'intégrité du code applicatif. Danny rapporte que les étapes 1–7 distantes/UI sont faites.
 

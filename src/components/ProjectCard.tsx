@@ -17,7 +17,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-soft)]" style={getTintedChipStyle(categoryColor)}>
+              <span className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={getTintedChipStyle(categoryColor)}>
                 {project.categoryLabel || project.category}
               </span>
               {project.status ? (
