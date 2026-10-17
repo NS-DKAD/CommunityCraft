@@ -1,16 +1,16 @@
 export const PROJECT_CATEGORIES = [
-  "Tools",
-  "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
   "Software",
   "Website",
   "Plugin",
   "Games",
+  "Mods",
 ] as const;
 
-export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
+export const HISTORICAL_PROJECT_CATEGORIES = ["Tools", "Shaders", "Rendering & Assets", "Libraries"] as const;
+
+// Category names are database-managed. This remains a string so projects can
+// retain historical values and admins can add approved catalog entries.
+export type ProjectCategory = string;
 
 export type ProjectStatus =
   | "Proposed"
@@ -37,7 +37,10 @@ export interface Project {
   author: string;
   description: string;
   category: ProjectCategory;
+  categoryLabel?: string;
+  categoryColor?: string | null;
   tags: string[];
+  tagColors?: Record<string, string | null>;
   githubUrl: string | null;
   stars: number;
   lastUpdated: string;

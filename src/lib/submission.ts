@@ -1,4 +1,4 @@
-import { ProjectCategory } from "@/types/project";
+import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
 
 export interface SubmissionInput {
   name?: string;
@@ -36,18 +36,6 @@ const VALID_STATUSES = [
   "Inactive",
 ] as const;
 
-const VALID_CATEGORIES: ProjectCategory[] = [
-  "Tools",
-  "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
-  "Software",
-  "Website",
-  "Plugin",
-  "Games",
-];
-
 const GITHUB_URL_PATTERN =
   /^https:\/\/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(\.git)?$/;
 
@@ -62,7 +50,8 @@ const URL_PATTERN = /^https?:\/\//i;
  * Returns normalized values if valid.
  */
 export function validateSubmissionInput(
-  input: Partial<SubmissionInput>
+  input: Partial<SubmissionInput>,
+  allowedCategories: readonly string[] = PROJECT_CATEGORIES
 ): ValidationResult {
   const errors: SubmissionValidationError[] = [];
 
@@ -163,7 +152,7 @@ export function validateSubmissionInput(
   const cat = input.category;
   if (!cat) {
     errors.push({ field: "category", message: "Category is required." });
-  } else if (!VALID_CATEGORIES.includes(cat)) {
+  } else if (cat.trim().toLocaleLowerCase() === "by artcraft" || !allowedCategories.includes(cat)) {
     errors.push({ field: "category", message: "Invalid category selected." });
   }
 

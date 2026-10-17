@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Project } from "@/types/project";
 import { ProjectCard } from "@/components/ProjectCard";
 import { replacementLevelLabel } from "@/lib/replacements";
+import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
 interface ProjectDetailClientProps {
   project: Project;
@@ -40,8 +41,12 @@ const REPORT_OPTIONS = [
 export function ProjectDetailClient({ project, similarProjects }: ProjectDetailClientProps) {
   const [isContributionOpen, setIsContributionOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
-  const [submitState, setSubmitState] = useState<"idle" | "success" | "error">("idle");
-  const [submitMessage, setSubmitMessage] = useState("");
+  const [contributionSubmitState, setContributionSubmitState] = useState<"idle" | "success" | "error">("idle");
+  const [contributionSubmitMessage, setContributionSubmitMessage] = useState("");
+  const [reportSubmitState, setReportSubmitState] = useState<"idle" | "success" | "error">("idle");
+  const [reportSubmitMessage, setReportSubmitMessage] = useState("");
+  const [isContributionSubmitting, setIsContributionSubmitting] = useState(false);
+  const [isReportSubmitting, setIsReportSubmitting] = useState(false);
   const [formState, setFormState] = useState({
     displayName: "",
     contactType: "email",
@@ -58,7 +63,7 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
 
   const metadata = [
     { label: "Status", value: project.status ?? "Proposed" },
-    { label: "Category", value: project.category },
+    { label: "Category", value: project.categoryLabel || project.category },
     { label: "Author", value: project.author },
     { label: "License", value: `${project.license} License` },
     { label: "Last update", value: project.lastUpdated },
@@ -72,8 +77,9 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
 
   async function handleContributionSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitState("idle");
-    setSubmitMessage("");
+    setContributionSubmitState("idle");
+    setContributionSubmitMessage("");
+    setIsContributionSubmitting(true);
 
     try {
       const response = await fetch(`/api/projects/${project.slug}/contribute`, {
@@ -90,8 +96,12 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
         throw new Error(json.error ?? "Unable to submit your contribution request.");
       }
 
-      setSubmitState("success");
-      setSubmitMessage(json.message ?? "Your interest has been sent to the project maintainer.");
+      setContributionSubmitState("success");
+      setContributionSubmitMessage(json.notificationStatus === "pending"
+        ? "Your request has been recorded. Email notification is delayed, but moderators can still review it in the admin panel."
+        : json.notificationStatus === "not_configured"
+          ? "Your request has been recorded. Email notification is not configured, but moderators can still review it in the admin panel."
+        : json.message ?? "Your interest has been sent to the project maintainer.");
       setFormState({
         displayName: "",
         contactType: "email",
@@ -101,15 +111,18 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
         message: "",
       });
     } catch (error) {
-      setSubmitState("error");
-      setSubmitMessage(error instanceof Error ? error.message : "Unable to submit your request.");
+      setContributionSubmitState("error");
+      setContributionSubmitMessage(error instanceof Error ? error.message : "Unable to submit your request.");
+    } finally {
+      setIsContributionSubmitting(false);
     }
   }
 
   async function handleReportSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitState("idle");
-    setSubmitMessage("");
+    setReportSubmitState("idle");
+    setReportSubmitMessage("");
+    setIsReportSubmitting(true);
 
     try {
       const response = await fetch(`/api/projects/${project.slug}/report`, {
@@ -126,12 +139,14 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
         throw new Error(json.error ?? "Unable to submit the report.");
       }
 
-      setSubmitState("success");
-      setSubmitMessage(json.message ?? "Thanks for reporting this project. It will be reviewed by a moderator.");
+      setReportSubmitState("success");
+      setReportSubmitMessage(json.message ?? "Thanks for reporting this project. It will be reviewed by a moderator.");
       setReportState({ reporterName: "", reason: "misleading", details: "" });
     } catch (error) {
-      setSubmitState("error");
-      setSubmitMessage(error instanceof Error ? error.message : "Unable to submit the report.");
+      setReportSubmitState("error");
+      setReportSubmitMessage(error instanceof Error ? error.message : "Unable to submit the report.");
+    } finally {
+      setIsReportSubmitting(false);
     }
   }
 
@@ -158,8 +173,8 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
 
       <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.22)] backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-medium text-[var(--text-soft)]">
-            {project.category}
+          <span className="rounded-md border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-medium text-[var(--text-soft)]" style={getTintedChipStyle(categoryChipColor(project.category, project.categoryColor))}>
+            {project.categoryLabel || project.category}
           </span>
           {project.status ? (
             <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
@@ -235,6 +250,7 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
                 <span
                   key={tag}
                   className="rounded-full border border-[var(--border)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-medium text-[var(--text-soft)]"
+                  style={getTintedChipStyle(project.tagColors?.[tag])}
                 >
                   #{tag}
                 </span>
@@ -371,23 +387,26 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
               </p>
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+                disabled={isContributionSubmitting}
+                className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60"
               >
-                Send interest
+                {isContributionSubmitting ? "Sending…" : "Send interest"}
               </button>
             </div>
           </form>
         )}
 
-        {submitState !== "idle" && (
+        {contributionSubmitState !== "idle" && (
           <div
+            role={contributionSubmitState === "error" ? "alert" : "status"}
+            aria-live="polite"
             className={`mt-4 rounded-xl border p-4 text-sm ${
-              submitState === "success"
+              contributionSubmitState === "success"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                 : "border-rose-500/30 bg-rose-500/10 text-rose-200"
             }`}
           >
-            {submitMessage}
+            {contributionSubmitMessage}
           </div>
         )}
       </section>
@@ -446,12 +465,27 @@ export function ProjectDetailClient({ project, similarProjects }: ProjectDetailC
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500"
+                disabled={isReportSubmitting}
+                className="inline-flex items-center justify-center rounded-full bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500 disabled:cursor-wait disabled:opacity-60"
               >
-                Send report
+                {isReportSubmitting ? "Sending…" : "Send report"}
               </button>
             </div>
           </form>
+        )}
+
+        {reportSubmitState !== "idle" && (
+          <div
+            role={reportSubmitState === "error" ? "alert" : "status"}
+            aria-live="polite"
+            className={`mt-4 rounded-xl border p-4 text-sm ${
+              reportSubmitState === "success"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-200"
+            }`}
+          >
+            {reportSubmitMessage}
+          </div>
         )}
       </section>
 

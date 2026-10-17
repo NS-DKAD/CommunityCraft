@@ -108,13 +108,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Unable to save contribution request." }, { status: 500 });
   }
 
-  // Attempt notification if configured. If notification is configured but fails,
-  // keep the saved request but respond with an error so the client does not
-  // incorrectly confirm that an admin was notified.
+  // The database is the source of truth. An email failure must not encourage a
+  // duplicate submission; the request remains available in the admin inbox.
   const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL?.trim();
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  let notificationStatus: "sent" | "pending" | "not_configured" = "not_configured";
 
   if (adminEmail && resendApiKey) {
+    notificationStatus = "sent";
     // Build a minimal, non-sensitive email body. Mask the contact details in the email
     // and indicate that full contact is stored in the database for reviewers.
     const masked = maskContact(String(payload.contact).trim(), String(payload.contactType).trim());
@@ -139,26 +140,35 @@ Full contact details and the full message are stored in the review table in the 
       `${project.id}|${String(payload.displayName).trim()}|${String(payload.contact).trim()}|${String(payload.skills).trim()}|${String(payload.contributionType).trim()}`
     ).toString('base64');
 
-    const sendResult = await sendResendEmail({
-      to: adminEmail,
-      subject,
-      text,
-      idempotencyKey,
-    });
+    let notificationSent = false;
+    let notificationHttpStatus = 0;
+    try {
+      const sendResult = await sendResendEmail({
+        to: adminEmail,
+        subject,
+        text,
+        idempotencyKey,
+      });
+      notificationSent = sendResult.ok;
+      notificationHttpStatus = sendResult.status;
+    } catch (error) {
+      console.error("[projects/contribute] Notification delivery threw after request was saved", {
+        errorType: error instanceof Error ? error.name : "unknown",
+      });
+    }
 
-    if (!sendResult.ok) {
-      console.error('[projects/contribute] Notification failed', sendResult);
-      // keep DB record but return error so client does not claim notification succeeded
-      return NextResponse.json(
-        { error: 'Saved, but failed to notify administrators. Please try again later.' },
-        { status: 502 }
-      );
+    if (!notificationSent) {
+      notificationStatus = "pending";
+      console.error("[projects/contribute] Notification delivery failed after request was saved", {
+        status: notificationHttpStatus,
+      });
     }
   }
 
   return NextResponse.json(
     {
       message: "Your contribution request has been recorded and will be reviewed by the project maintainer or a moderator.",
+      notificationStatus,
     },
     { status: 201 }
   );

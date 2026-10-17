@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ProjectCategory } from "@/types/project";
+import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -27,13 +27,8 @@ interface SubmitResult {
   name?: string;
 }
 
-const CATEGORIES: ProjectCategory[] = [
-  "Software",
-  "Website",
-  "Plugin",
-  "Games",
-  "Mods",
-];
+type SubmitCategory = { name: ProjectCategory; display_name: string | null };
+const DEFAULT_CATEGORIES: SubmitCategory[] = PROJECT_CATEGORIES.map((name) => ({ name, display_name: null }));
 
 const INITIAL_STATE = {
   name: "",
@@ -87,6 +82,31 @@ export default function SubmitPage() {
   const [applicationInput, setApplicationInput] = useState("");
   const [selectedReplacements, setSelectedReplacements] = useState<SelectedReplacement[]>([]);
   const [applicationsUnavailable, setApplicationsUnavailable] = useState(false);
+  const [categories, setCategories] = useState<SubmitCategory[]>(DEFAULT_CATEGORIES);
+  const [categoryCatalogUnavailable, setCategoryCatalogUnavailable] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadCategories() {
+      const supabase = getSupabaseClient();
+      if (!supabase) { if (!isCancelled) setCategoryCatalogUnavailable(true); return; }
+      const { data, error } = await supabase.from("project_categories")
+        .select("name, display_name").eq("is_active", true).order("sort_order").limit(500);
+      if (isCancelled) return;
+      if (error?.code === "PGRST205") {
+        setCategories(DEFAULT_CATEGORIES);
+        return;
+      }
+      if (error || !data?.length) {
+        setCategories([]);
+        setCategoryCatalogUnavailable(true);
+        return;
+      }
+      setCategories(data);
+    }
+    void loadCategories();
+    return () => { isCancelled = true; };
+  }, []);
 
   useEffect(() => {
     let isCancelled = false;
@@ -504,10 +524,11 @@ export default function SubmitPage() {
                     <option value="" disabled>
                       Select a category…
                     </option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {categories.map((category) => (
+                      <option key={category.name} value={category.name}>{category.display_name || category.name}</option>
                     ))}
                   </select>
+                  {categoryCatalogUnavailable && categories.length === 0 && <p className="mt-1 text-xs text-rose-400">The category catalog is unavailable. Please try again later.</p>}
                   {fieldErrors.category && (
                     <p id="category-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.category}

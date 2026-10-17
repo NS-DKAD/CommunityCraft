@@ -1,37 +1,33 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Project, PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Project, ProjectCategory } from "@/types/project";
 import { matchesProjectCategory, matchesProjectQuery } from "@/lib/projects";
+import type { DiscoverTag } from "@/lib/discover-tags";
+import { buildPublicCategoryOptions } from "@/lib/category-catalog";
 import { ProjectCard } from "./ProjectCard";
+import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
 interface ProjectCatalogProps {
   initialProjects: Project[];
   dataSource?: "database" | "demo" | "error";
   errorMessage?: string;
   initialQuery?: string;
+  tagFilters?: DiscoverTag[];
 }
-
-const CATEGORIES: Array<"All" | ProjectCategory> = ["All", ...PROJECT_CATEGORIES];
 
 export function ProjectCatalog({
   initialProjects,
   dataSource = "demo",
   errorMessage,
   initialQuery = "",
+  tagFilters = [],
 }: ProjectCatalogProps) {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<"All" | ProjectCategory>("All");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      All: initialProjects.length,
-    };
-    for (const project of initialProjects) {
-      counts[project.category] = (counts[project.category] || 0) + 1;
-    }
-    return counts;
-  }, [initialProjects]);
+  const categoryOptions = useMemo(() => buildPublicCategoryOptions(initialProjects), [initialProjects]);
 
   const filteredProjects = useMemo(() => {
     const query = searchQuery.trim();
@@ -40,14 +36,18 @@ export function ProjectCatalog({
       if (!matchesProjectCategory(project, selectedCategory)) {
         return false;
       }
+      if (selectedTag && !project.tags.some((tag) => tag.toLowerCase() === selectedTag.toLowerCase())) {
+        return false;
+      }
 
       return matchesProjectQuery(project, query);
     });
-  }, [initialProjects, searchQuery, selectedCategory]);
+  }, [initialProjects, searchQuery, selectedCategory, selectedTag]);
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setSelectedCategory("All");
+    setSelectedTag(null);
   };
 
   return (
@@ -134,9 +134,12 @@ export function ProjectCatalog({
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-2">
-          {CATEGORIES.map((category) => {
+          {[
+            { name: "All", label: "All", count: initialProjects.length, color: null },
+            ...categoryOptions,
+          ].map((option) => {
+            const category = option.name as "All" | ProjectCategory;
             const isSelected = selectedCategory === category;
-            const count = categoryCounts[category] || 0;
 
             return (
               <button
@@ -149,10 +152,11 @@ export function ProjectCatalog({
                     ? "border-[var(--border-strong)] bg-[var(--text)] text-[var(--bg)]"
                     : "border-[var(--border)] bg-[var(--surface-strong)] text-[var(--text-soft)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
                 }`}
+                style={!isSelected ? getTintedChipStyle(categoryChipColor(category, option.color)) : undefined}
               >
-                <span>{category}</span>
+                <span>{option.label}</span>
                 <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isSelected ? "bg-[var(--bg)] text-[var(--text)]" : "bg-[var(--brand-soft)] text-[var(--text-muted)]"}`}>
-                  {count}
+                  {option.count}
                 </span>
               </button>
             );
@@ -164,7 +168,7 @@ export function ProjectCatalog({
             {filteredProjects.length === 0 ? "No projects found" : `Showing ${filteredProjects.length} of ${initialProjects.length}`}
           </p>
 
-          {(searchQuery || selectedCategory !== "All") && (
+          {(searchQuery || selectedCategory !== "All" || selectedTag) && (
             <button
               type="button"
               onClick={handleResetFilters}
@@ -174,6 +178,13 @@ export function ProjectCatalog({
             </button>
           )}
         </div>
+
+        {tagFilters.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <TagFilterDropdown tags={tagFilters} selectedTag={selectedTag} onSelect={setSelectedTag} />
+            <span className="text-xs text-[var(--text-muted)]">Categories above and tags here are separate filters.</span>
+          </div>
+        )}
 
         {filteredProjects.length > 0 ? (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -188,5 +199,60 @@ export function ProjectCatalog({
         )}
       </div>
     </section>
+  );
+}
+
+function TagFilterDropdown({ tags, selectedTag, onSelect }: {
+  tags: DiscoverTag[];
+  selectedTag: string | null;
+  onSelect: (tag: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const filteredTags = useMemo(() => tags.filter((tag) => (tag.display_name || tag.name).toLowerCase().includes(query.trim().toLowerCase())), [tags, query]);
+  const activeOptionId = activeIndex === 0 ? "discover-tag-option-all" : `discover-tag-option-${filteredTags[activeIndex - 1]?.id}`;
+
+  useEffect(() => { if (open) searchRef.current?.focus(); }, [open]);
+
+  function choose(value: string | null) {
+    onSelect(value);
+    setOpen(false);
+    setQuery("");
+    setActiveIndex(0);
+  }
+
+  function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const lastIndex = filteredTags.length;
+    if (event.key === "ArrowDown") { event.preventDefault(); setActiveIndex((index) => Math.min(index + 1, lastIndex)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setActiveIndex((index) => Math.max(index - 1, 0)); }
+    else if (event.key === "Home") { event.preventDefault(); setActiveIndex(0); }
+    else if (event.key === "End") { event.preventDefault(); setActiveIndex(lastIndex); }
+    else if (event.key === "Enter") {
+      event.preventDefault();
+      choose(activeIndex === 0 ? null : filteredTags[activeIndex - 1]?.name ?? null);
+    } else if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+  }
+
+  const selected = tags.find((tag) => tag.name === selectedTag);
+  return (
+    <div className="relative w-full max-w-sm">
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-2.5 text-left text-sm text-[var(--text)] hover:border-[var(--border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
+        <span className="truncate">{selected ? `Tag: ${selected.display_name || selected.name}` : "Filter by tag"}</span>
+        <span aria-hidden="true" className="text-[var(--text-muted)]">{open ? "⌃" : "⌄"}</span>
+      </button>
+      {open && <div className="absolute z-30 mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-2 shadow-2xl">
+        <label className="sr-only" htmlFor="discover-tag-search">Search tags</label>
+        <input ref={searchRef} id="discover-tag-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="discover-tag-options" aria-activedescendant={activeOptionId} value={query} onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }} onKeyDown={handleSearchKeyDown} placeholder="Search tags…" className="mb-2 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]" />
+        <div id="discover-tag-options" role="listbox" aria-label="Tags" className="max-h-64 overflow-y-auto">
+          <div id="discover-tag-option-all" role="option" aria-selected={!selectedTag} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)} className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm ${activeIndex === 0 ? "bg-[var(--surface)]" : "hover:bg-[var(--surface)]"}`}>
+            <span>All tags</span><span className="text-xs text-[var(--text-muted)]">Clear</span>
+          </div>
+          {filteredTags.map((tag, index) => <div id={`discover-tag-option-${tag.id}`} key={tag.id} role="option" aria-selected={selectedTag === tag.name} onMouseEnter={() => setActiveIndex(index + 1)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(tag.name)} style={getTintedChipStyle(tag.color)} className={`mt-1 flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm ${activeIndex === index + 1 ? "outline outline-1 outline-[var(--ring)]" : ""}`}><span>{tag.display_name || tag.name}</span><span className="text-xs opacity-80">{tag.count}</span></div>)}
+          {filteredTags.length === 0 && <p role="status" className="px-3 py-4 text-sm text-[var(--text-muted)]">No tags match your search.</p>}
+        </div>
+      </div>}
+    </div>
   );
 }

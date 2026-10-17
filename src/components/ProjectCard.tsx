@@ -1,27 +1,14 @@
 import Link from "next/link";
 import React from "react";
 import { Project } from "@/types/project";
+import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
 interface ProjectCardProps {
   project: Project;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Tools: "border-sky-500/25 bg-sky-500/8 text-sky-700",
-  Mods: "border-violet-500/25 bg-violet-500/8 text-violet-700",
-  Shaders: "border-cyan-500/25 bg-cyan-500/8 text-cyan-700",
-  "Rendering & Assets": "border-emerald-500/25 bg-emerald-500/8 text-emerald-700",
-  Libraries: "border-fuchsia-500/25 bg-fuchsia-500/8 text-fuchsia-700",
-  Software: "border-sky-500/25 bg-sky-500/8 text-sky-700",
-  Website: "border-emerald-500/25 bg-emerald-500/8 text-emerald-700",
-  Plugin: "border-cyan-500/25 bg-cyan-500/8 text-cyan-700",
-  Games: "border-amber-500/25 bg-amber-500/8 text-amber-700",
-};
-
 export function ProjectCard({ project }: ProjectCardProps) {
-  const categoryStyle =
-    CATEGORY_COLORS[project.category] ||
-    "border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-soft)]";
+  const categoryColor = categoryChipColor(project.category, project.categoryColor);
   const projectHref = project.slug ? `/projects/${project.slug}` : `/projects/${project.id}`;
 
   return (
@@ -30,8 +17,8 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] ${categoryStyle}`}>
-                {project.category}
+              <span className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-soft)]" style={getTintedChipStyle(categoryColor)}>
+                {project.categoryLabel || project.category}
               </span>
               {project.status ? (
                 <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-soft)]">
@@ -71,7 +58,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
         <div className="mt-4 flex flex-wrap gap-2">
           {project.tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] text-[var(--text-soft)]">
+            <span key={tag} className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] text-[var(--text-soft)]" style={getTintedChipStyle(project.tagColors?.[tag])}>
               #{tag}
             </span>
           ))}

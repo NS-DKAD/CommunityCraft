@@ -22,6 +22,7 @@ export interface Database {
           tags: string[];
           github_url: string | null;
           is_approved: boolean;
+          moderation_status: "pending" | "approved" | "rejected";
           goal: string | null;
           status: string | null;
           source_type: string | null;
@@ -41,6 +42,7 @@ export interface Database {
           tags?: string[];
           github_url?: string | null;
           is_approved?: boolean;
+          moderation_status?: "pending" | "approved" | "rejected";
           goal?: string | null;
           status?: string | null;
           source_type?: string | null;
@@ -60,6 +62,7 @@ export interface Database {
           tags?: string[];
           github_url?: string | null;
           is_approved?: boolean;
+          moderation_status?: "pending" | "approved" | "rejected";
           goal?: string | null;
           status?: string | null;
           source_type?: string | null;
@@ -209,12 +212,44 @@ export interface Database {
           }
         ];
       };
+      admin_users: {
+        Row: { user_id: string; added_at: string; added_by: string | null };
+        Insert: { user_id: string; added_at?: string; added_by?: string | null };
+        Update: { user_id?: string; added_at?: string; added_by?: string | null };
+        Relationships: [];
+      };
+      moderation_events: {
+        Row: {
+          id: string;
+          actor_id: string;
+          entity_type: "project" | "contribution_request" | "project_report";
+          entity_id: string;
+          action: string;
+          before_state: Json;
+          after_state: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id: string;
+          entity_type: "project" | "contribution_request" | "project_report";
+          entity_id: string;
+          action: string;
+          before_state: Json;
+          after_state: Json;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
       tags: {
         Row: {
           id: string;
           name: string;
           slug: string;
           description: string | null;
+          display_name: string | null;
+          color: string | null;
           is_active: boolean;
           is_official: boolean;
           created_at: string;
@@ -225,6 +260,8 @@ export interface Database {
           name: string;
           slug: string;
           description?: string | null;
+          display_name?: string | null;
+          color?: string | null;
           is_active?: boolean;
           is_official?: boolean;
           created_at?: string;
@@ -235,6 +272,8 @@ export interface Database {
           name?: string;
           slug?: string;
           description?: string | null;
+          display_name?: string | null;
+          color?: string | null;
           is_active?: boolean;
           is_official?: boolean;
           created_at?: string;
@@ -300,6 +339,42 @@ export interface Database {
             referencedColumns: ["id"];
           }
         ];
+      };
+      project_categories: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          display_name: string | null;
+          color: string | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          display_name?: string | null;
+          color?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          slug?: string;
+          display_name?: string | null;
+          color?: string | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       applications: {
         Row: {
@@ -399,7 +474,31 @@ export interface Database {
       };
     };
     Functions: {
-      [_ in never]: never;
+      is_communitycraft_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
+      admin_save_project: {
+        Args: { p_project_id: string; p_fields: Json; p_moderation_status: "pending" | "approved" | "rejected" };
+        Returns: undefined;
+      };
+      admin_update_contribution_request: {
+        Args: { p_request_id: string; p_status: "new" | "reviewed" | "replied" | "dismissed" };
+        Returns: undefined;
+      };
+      admin_update_project_report: {
+        Args: { p_report_id: string; p_status: string };
+        Returns: undefined;
+      };
+      admin_update_tag_presentation: {
+        Args: { p_tag_id: string; p_display_name: string | null; p_color: string | null };
+        Returns: undefined;
+      };
+      admin_create_project_category: {
+        Args: { p_name: string; p_slug: string; p_display_name: string | null; p_color: string | null };
+        Returns: string;
+      };
+      admin_update_project_category_presentation: {
+        Args: { p_category_id: string; p_display_name: string | null; p_color: string | null; p_is_active: boolean };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;

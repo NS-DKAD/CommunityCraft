@@ -9,7 +9,7 @@ import {
   getSupabaseServiceClient,
   isServiceClientConfigured,
 } from "@/lib/supabase/server-client";
-import { ProjectCategory } from "@/types/project";
+import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
 import { findUnknownApplicationIds, validateReplacementInput } from "@/lib/replacements";
 import { getPersistenceHttpOutcome, persistProjectWithReplacements } from "@/lib/project-persistence";
 import { resolveSubmissionTags } from "@/lib/tags";
@@ -92,6 +92,25 @@ export async function POST(request: NextRequest) {
   }
   const { name, goal, authorName, githubUrl, websiteUrl, discussionUrl, description, category, status, tags } = payload;
 
+  // Connect before validation so dynamic categories are still checked against
+  // the canonical active catalog on the server. Only a missing migration uses
+  // the fixed MVP list; other catalog errors fail closed.
+  const supabase = getSupabaseServiceClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Database connection is unavailable." }, { status: 503 });
+  }
+  const { data: categoryRows, error: categoryError } = await supabase
+    .from("project_categories").select("name").eq("is_active", true).limit(500);
+  let allowedCategories: readonly string[];
+  if (categoryError?.code === "PGRST205") {
+    allowedCategories = PROJECT_CATEGORIES;
+  } else if (categoryError || !categoryRows) {
+    console.error("[submit] Category catalog lookup failed:", categoryError?.code ?? "unknown");
+    return NextResponse.json({ error: "The category catalog is temporarily unavailable. Please try again later." }, { status: 503 });
+  } else {
+    allowedCategories = categoryRows.map((row) => row.name);
+  }
+
   const validation = validateSubmissionInput({
     name: typeof name === "string" ? name : undefined,
     goal: typeof goal === "string" ? goal : undefined,
@@ -108,7 +127,7 @@ export async function POST(request: NextRequest) {
     category: typeof category === "string" ? (category as ProjectCategory) : undefined,
     status: typeof status === "string" ? status : "Proposed",
     tags: Array.isArray(tags) ? (tags as string[]) : [],
-  });
+  }, allowedCategories);
 
   if (!validation.valid) {
     return NextResponse.json(
@@ -166,14 +185,7 @@ export async function POST(request: NextRequest) {
     resolvedSlug = slugFromGitHubFullName(githubMetadata.data.fullName);
   }
 
-  // 4. Connect to Supabase (service role — bypasses RLS for this insert)
-  const supabase = getSupabaseServiceClient();
-  if (!supabase) {
-    return NextResponse.json(
-      { error: "Database connection is unavailable." },
-      { status: 503 }
-    );
-  }
+  // 4. Supabase service client was already used to validate the active category catalog.
 
   const submittedTags = Array.isArray(tags) ? tags as string[] : [];
   let canonicalTags: Array<{ id: string; name: string; slug: string }> = [];

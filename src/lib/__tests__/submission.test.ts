@@ -7,11 +7,14 @@ import { getPersistenceHttpOutcome, persistProjectWithReplacements } from "@/lib
 import { resolveSubmissionTags } from "@/lib/tags";
 import {
   getProjectBySlug,
+  getSimilarProjects,
   matchesProjectCategory,
   matchesProjectQuery,
   resolveProjectTags,
+  scoreSimilarProject,
 } from "@/lib/projects";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { buildDiscoverTagOptions, validateTagPresentationInput } from "@/lib/discover-tags";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 jest.mock("@/lib/supabase/client", () => ({
   isSupabaseConfigured: jest.fn(() => true),
@@ -54,6 +57,54 @@ describe("matchesProjectQuery", () => {
       replacing: [{ applicationId: "app-1", applicationName: "Photoshop", applicationSlug: "photoshop", level: "Partial" as const }],
     };
     expect(matchesProjectQuery(project, "photoshop")).toBe(true);
+  });
+});
+
+describe("similar projects and Discover tag filters", () => {
+  const application = (applicationId: string, applicationName = "Photoshop") => ({
+    applicationId, applicationName, applicationSlug: applicationName.toLowerCase(), level: "Partial" as const,
+  });
+
+  test("canonical shared replacement application outranks tag and category overlap", () => {
+    const source = { category: "Software" as const, status: null, tags: ["design"], replacing: [application("canonical-1")] };
+    const sharedNeed = { slug: "shared", category: "Games" as const, status: null, tags: [], replacing: [application("canonical-1", "Photo Shop")] };
+    const sameNameDifferentApp = { slug: "different", category: "Software" as const, status: null, tags: ["design"], replacing: [application("canonical-2")] };
+    expect(scoreSimilarProject(source, sharedNeed).replacementOverlap).toBe(1);
+    expect(scoreSimilarProject(source, sharedNeed).score).toBeGreaterThan(scoreSimilarProject(source, sameNameDifferentApp).score);
+    expect(scoreSimilarProject(source, sameNameDifferentApp).replacementOverlap).toBe(0);
+  });
+
+  test("keeps recommendations useful without Replacing data and excludes the source project", async () => {
+    (isSupabaseConfigured as jest.Mock).mockReturnValue(false);
+    try {
+      const { DEMO_PROJECTS } = await import("@/data/demo-projects");
+      const source = { ...DEMO_PROJECTS[0], slug: "demo-source" };
+      const recommendations = await getSimilarProjects(source, 4);
+      expect(recommendations.length).toBeGreaterThan(0);
+      expect(recommendations.some((candidate) => candidate.slug === source.slug)).toBe(false);
+    } finally {
+      (isSupabaseConfigured as jest.Mock).mockReturnValue(true);
+    }
+  });
+
+  test("Discover filters count only associations from public projects and hide empty or inactive tags", () => {
+    const options = buildDiscoverTagOptions([
+      { id: "tag-a", slug: "design", name: "Design", display_name: "Creative", color: "#112233", is_active: true },
+      { id: "tag-b", slug: "empty", name: "Empty", display_name: null, color: null, is_active: true },
+      { id: "tag-c", slug: "inactive", name: "Inactive", display_name: null, color: null, is_active: false },
+    ], [
+      { project_id: "approved", tag_id: "tag-a" },
+      { project_id: "pending", tag_id: "tag-b" },
+      { project_id: "approved", tag_id: "tag-c" },
+    ], ["approved"]);
+    expect(options).toEqual([{ id: "tag-a", slug: "design", name: "Design", display_name: "Creative", color: "#112233", is_active: true, count: 1 }]);
+  });
+
+  test("tag presentation accepts only a label and six-digit hex color", () => {
+    expect(validateTagPresentationInput({ displayName: "Creative", color: "#abcdef" })).toEqual({ valid: true, displayName: "Creative", color: "#ABCDEF" });
+    expect(validateTagPresentationInput({ displayName: "", color: null })).toEqual({ valid: true, displayName: null, color: null });
+    expect(validateTagPresentationInput({ displayName: "Custom", color: "red" }).valid).toBe(false);
+    expect(validateTagPresentationInput({ name: "New tag", slug: "free-tag" }).valid).toBe(false);
   });
 });
 
@@ -318,20 +369,22 @@ describe("validateSubmissionInput", () => {
 
   test("accepts all valid categories", () => {
     const cats = [
-      "Tools",
-      "Mods",
-      "Shaders",
-      "Rendering & Assets",
-      "Libraries",
       "Software",
       "Website",
       "Plugin",
       "Games",
+      "Mods",
     ] as const;
     for (const cat of cats) {
       const r = validateSubmissionInput({ ...validBase, category: cat });
       expect(r.valid).toBe(true);
     }
+  });
+
+  test("only accepts database-managed categories explicitly supplied by the server", () => {
+    expect(validateSubmissionInput({ ...validBase, category: "Studio" }, ["Studio"]).valid).toBe(true);
+    expect(validateSubmissionInput({ ...validBase, category: "Unapproved" }, ["Studio"]).valid).toBe(false);
+    expect(validateSubmissionInput({ ...validBase, category: "By ArtCraft" }, ["By ArtCraft"]).valid).toBe(false);
   });
 
   test("rejects tags with spaces or uppercase", () => {
@@ -434,6 +487,10 @@ describe("getProjectBySlug", () => {
     const selectTags = jest.fn().mockReturnValue({ in: inTags });
     const fromTags = jest.fn().mockReturnValue({ select: selectTags });
 
+    const inCategories = jest.fn().mockResolvedValue({ data: [{ name: "Tools", display_name: "Legacy tools", color: "#123456" }], error: null });
+    const selectCategories = jest.fn().mockReturnValue({ in: inCategories });
+    const fromCategories = jest.fn().mockReturnValue({ select: selectCategories });
+
     const inReplacements = jest.fn().mockResolvedValue({ data: [], error: null });
     const selectReplacements = jest.fn().mockReturnValue({ in: inReplacements });
     const fromReplacements = jest.fn().mockReturnValue({ select: selectReplacements });
@@ -444,6 +501,7 @@ describe("getProjectBySlug", () => {
     const from = jest.fn((table: string) => {
       if (table === "project_tags") return fromProjectTags();
       if (table === "tags") return fromTags();
+      if (table === "project_categories") return fromCategories();
       if (table === "project_replacements") return fromReplacements();
       return { select };
     });

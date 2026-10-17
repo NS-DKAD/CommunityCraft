@@ -59,10 +59,11 @@ export default function Home({ searchParams }: HomeProps) {
               </div>
 
               <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Tools</span>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Software</span>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Website</span>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Plugin</span>
+                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Games</span>
                 <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Mods</span>
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Shaders</span>
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">Libraries</span>
               </div>
             </div>
           </div>
