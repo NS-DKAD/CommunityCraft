@@ -64,3 +64,7 @@ Official repository or link provided by the creator, with a clear distinction be
 ###### Links to plugins
 
 Provide the ability to reference plugins in the catalog, without implementing their download for now.
+
+---
+
+Items explicitly out of this MVP (accounts, bulk GitHub import, Discord bot, AI repo analysis, plugin downloads, public free-form tags, “By ArtCraft” as a category, admin pagination beyond the newest 500, bulk delete, etc.) are tracked in `requested_Features.md`. Do not implement them unless Danny insists.

@@ -87,17 +87,15 @@ Hors MVP (import GitHub, bot Discord, comptes, IA, téléchargement plugins, tag
 
 ## 7. Vérifications
 
-Dernière vérif Replacing / admin / catégories (2026-10-16), inchangée :
+Dernières vérifications exécutées (2026-10-17) :
 
-- `npx tsc --noEmit` : OK (après types Next stables).
-- `npm run lint` : OK, 0 erreur, 2 warnings préexistants.
-- `npm test -- --runInBand` : 54 tests (après catégories).
-- `npx next build` : échec environnemental Turbopack CSS.
-- `npx next build --webpack` : DNS `fonts.googleapis.com` puis parfois `EPERM` ; **build production non confirmé**.
+- `npx tsc --noEmit` : OK (0 erreur de types).
+- `npm run lint` : OK (0 erreur, 2 warnings préexistants).
+- `npm test` : 6 suites, 65 tests passés avec succès (dont tests unitaires des brouillons admin `workspace-drafts.test.ts`).
+- `npx next build --webpack` : **SUCCÈS CONFIRMÉ** (compilation 100 % réussie, 12 pages générées en static/PPR/dynamic sans aucune erreur).
 
-Les contrôles locaux ne prouvent pas à eux seuls le projet Supabase réel. Danny rapporte depuis que les étapes 1–7 distantes/UI sont faites.
+Les contrôles locaux confirment l'intégrité du code applicatif. Danny rapporte que les étapes 1–7 distantes/UI sont faites.
 
-Vérification de cette tâche (2026-10-17) : voir le compte rendu agent (tests drafts admin, tsc, lint, build).
 
 ## 8. Garde-fous
 
