@@ -1,11 +1,24 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
-import { ProjectCategory } from "@/types/project";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import { ReplacementLevel } from "@/types/project";
+
+type ApplicationOption = { id: string; name: string; slug: string };
+type SelectedReplacement = { application: ApplicationOption; level: ReplacementLevel };
 
 type FieldErrors = Record<string, string | undefined>;
+
+type TagSuggestion = {
+  value: string;
+  canonical: string;
+  displayLabel: string;
+  isAlias: boolean;
+};
 
 interface SubmitResult {
   ok: boolean;
@@ -14,26 +27,192 @@ interface SubmitResult {
   name?: string;
 }
 
-const CATEGORIES: ProjectCategory[] = [
-  "Tools",
-  "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
-];
+type SubmitCategory = { name: ProjectCategory; display_name: string | null };
+const DEFAULT_CATEGORIES: SubmitCategory[] = PROJECT_CATEGORIES.map((name) => ({ name, display_name: null }));
 
 const INITIAL_STATE = {
+  name: "",
+  goal: "",
+  authorName: "",
   githubUrl: "",
+  websiteUrl: "",
+  discussionUrl: "",
   description: "",
   category: "" as ProjectCategory | "",
-  tags: "",
+  status: "Proposed",
 };
+
+function normalizeTagToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]+/g, "")
+    .replace(/^-+|-+$/g, "");
+}
+
+function dedupeTags(values: string[]): string[] {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeTagToken(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    clean.push(normalized);
+  }
+
+  return clean;
+}
 
 export default function SubmitPage() {
   const [form, setForm] = useState(INITIAL_STATE);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
+  const [tagCatalogUnavailable, setTagCatalogUnavailable] = useState(false);
+  const [activeTagIndex, setActiveTagIndex] = useState(0);
+  const tagInputRef = useRef<HTMLInputElement | null>(null);
+  const [applications, setApplications] = useState<ApplicationOption[]>([]);
+  const [applicationInput, setApplicationInput] = useState("");
+  const [selectedReplacements, setSelectedReplacements] = useState<SelectedReplacement[]>([]);
+  const [applicationsUnavailable, setApplicationsUnavailable] = useState(false);
+  const [categories, setCategories] = useState<SubmitCategory[]>(DEFAULT_CATEGORIES);
+  const [categoryCatalogUnavailable, setCategoryCatalogUnavailable] = useState(false);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadCategories() {
+      const supabase = getSupabaseClient();
+      if (!supabase) { if (!isCancelled) setCategoryCatalogUnavailable(true); return; }
+      const { data, error } = await supabase.from("project_categories")
+        .select("name, display_name").eq("is_active", true).order("sort_order").limit(500);
+      if (isCancelled) return;
+      if (error?.code === "PGRST205") {
+        setCategories(DEFAULT_CATEGORIES);
+        return;
+      }
+      if (error || !data?.length) {
+        setCategories([]);
+        setCategoryCatalogUnavailable(true);
+        return;
+      }
+      setCategories(data);
+    }
+    void loadCategories();
+    return () => { isCancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+    async function loadApplications() {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        if (!isCancelled) setApplicationsUnavailable(true);
+        return;
+      }
+      const { data, error } = await supabase.from("applications").select("id, name, slug").order("name").limit(500);
+      if (!isCancelled) {
+        if (error) setApplicationsUnavailable(true);
+        else setApplications((data ?? []).map((item) => ({ id: item.id, name: item.name, slug: item.slug })));
+      }
+    }
+    void loadApplications();
+    return () => { isCancelled = true; };
+  }, []);
+
+  const filteredApplications = useMemo(() => {
+    const query = applicationInput.trim().toLocaleLowerCase();
+    return applications
+      .filter((item) => !selectedReplacements.some((selected) => selected.application.id === item.id))
+      .filter((item) => !query || item.name.toLocaleLowerCase().includes(query))
+      .slice(0, 8);
+  }, [applicationInput, applications, selectedReplacements]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadSuggestions() {
+      try {
+        const supabase = getSupabaseClient();
+
+        if (!supabase) {
+          if (!isCancelled) setTagCatalogUnavailable(true);
+          return;
+        }
+
+        const [{ data: tagRows, error: tagError }, { data: aliasRows, error: aliasError }] = await Promise.all([
+          supabase.from("tags").select("id, name, slug").eq("is_active", true).order("name").limit(1000),
+          supabase.from("tag_aliases").select("alias, tag_id").order("alias").limit(1000),
+        ]);
+        if (tagError || aliasError) throw new Error("Unable to load the tag catalog.");
+
+        const canonicalById = new Map((tagRows ?? []).map((tag) => [tag.id, tag]));
+        const suggestions: TagSuggestion[] = (tagRows ?? []).map((tag) => ({
+          value: tag.slug,
+          canonical: tag.slug,
+          displayLabel: tag.name,
+          isAlias: false,
+        }));
+        for (const row of aliasRows ?? []) {
+          const canonical = canonicalById.get(row.tag_id);
+          const alias = String(row.alias ?? "").trim();
+          if (!canonical || !alias) continue;
+          suggestions.push({
+            value: normalizeTagToken(alias),
+            canonical: canonical.slug,
+            displayLabel: alias,
+            isAlias: true,
+          });
+        }
+
+        const uniqueSuggestions = new Map<string, TagSuggestion>();
+        for (const suggestion of suggestions) {
+          const key = `${normalizeTagToken(suggestion.value)}:${suggestion.canonical}`;
+          if (!uniqueSuggestions.has(key)) uniqueSuggestions.set(key, suggestion);
+        }
+        if (!isCancelled) setTagSuggestions(Array.from(uniqueSuggestions.values()));
+      } catch {
+        if (!isCancelled) setTagCatalogUnavailable(true);
+      }
+    }
+
+    void loadSuggestions();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  const filteredTagSuggestions = useMemo(() => {
+    const query = normalizeTagToken(tagInput);
+    const source = tagSuggestions.filter((suggestion) => {
+      const normalizedValue = normalizeTagToken(suggestion.value);
+      const normalizedCanonical = normalizeTagToken(suggestion.canonical);
+
+      if (!normalizedValue && !normalizedCanonical) {
+        return false;
+      }
+
+      if (!query) {
+        return !selectedTags.includes(suggestion.canonical);
+      }
+
+      return (
+        !selectedTags.includes(suggestion.canonical) &&
+        (normalizedValue.includes(query) ||
+          normalizedCanonical.includes(query) ||
+          suggestion.displayLabel.toLowerCase().includes(query))
+      );
+    });
+
+    return source.slice(0, 8);
+  }, [selectedTags, tagInput, tagSuggestions]);
 
   function handleChange(
     e: React.ChangeEvent<
@@ -44,13 +223,55 @@ export default function SubmitPage() {
     setFieldErrors((prev) => ({ ...prev, [e.target.name]: undefined }));
   }
 
+  function addSelectedTag(suggestion: TagSuggestion) {
+    const canonical = suggestion.canonical;
+    if (!canonical) {
+      return;
+    }
+
+    setSelectedTags((prev) => dedupeTags([...prev, canonical]));
+    setTagInput("");
+    setActiveTagIndex(0);
+    tagInputRef.current?.focus();
+  }
+
+  function handleTagKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!filteredTagSuggestions.length) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveTagIndex((prev) => (prev + 1) % filteredTagSuggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveTagIndex((prev) => (prev - 1 + filteredTagSuggestions.length) % filteredTagSuggestions.length);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const selected = filteredTagSuggestions[activeTagIndex];
+      if (selected) addSelectedTag(selected);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setTagInput("");
+      setActiveTagIndex(0);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const tags = form.tags
-      .split(",")
-      .map((t) => t.trim().toLowerCase())
-      .filter((t) => t.length > 0);
+    const tags = dedupeTags(selectedTags);
 
     startTransition(async () => {
       setFieldErrors({});
@@ -61,10 +282,17 @@ export default function SubmitPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            githubUrl: form.githubUrl,
+            name: form.name,
+            goal: form.goal,
+            authorName: form.authorName,
+            githubUrl: form.githubUrl.trim(),
+            websiteUrl: form.websiteUrl.trim(),
+            discussionUrl: form.discussionUrl.trim(),
             description: form.description,
             category: form.category,
+            status: form.status,
             tags,
+            replacements: selectedReplacements.map(({ application, level }) => ({ applicationId: application.id, level })),
           }),
         });
 
@@ -84,6 +312,10 @@ export default function SubmitPage() {
             name: json.name,
           });
           setForm(INITIAL_STATE);
+          setSelectedTags([]);
+          setTagInput("");
+          setSelectedReplacements([]);
+          setApplicationInput("");
         } else if (res.status === 422 && json.fieldErrors) {
           const errors: FieldErrors = {};
           for (const fe of json.fieldErrors) {
@@ -107,127 +339,173 @@ export default function SubmitPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
       <Header />
 
-      <main className="flex-1 bg-zinc-50 dark:bg-zinc-950">
+      <main className="flex-1 bg-[var(--bg)]">
         <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6 lg:px-8">
-          {/* Page heading */}
           <div className="mb-8">
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               Submit a Project
             </h1>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              Share an open-source ArtCraft creation with the community. The repository
-              must be public on GitHub. Project files will remain hosted on your GitHub
-              account — CommunityCraft only stores the listing.
+            <p className="mt-2 text-sm text-[var(--text-soft)]">
+              Share an ArtCraft project with the community. You can provide a GitHub
+              repository when available, or submit without one if the project is still
+              in early stages. CommunityCraft only stores the listing and keeps the
+              project files hosted with their authors.
             </p>
           </div>
 
-          {/* Auth notice */}
-          <div className="mb-8 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-sm dark:border-blue-900/50 dark:bg-blue-950/30">
+          <div className="mb-8 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-sm text-emerald-100">
             <div className="flex items-start gap-3">
               <span className="text-xl" aria-hidden="true">🔑</span>
               <div>
-                <p className="font-semibold text-blue-900 dark:text-blue-200">
-                  Account required in the future
+                <p className="font-semibold text-emerald-100">
+                  Moderation before publication
                 </p>
-                <p className="mt-0.5 text-xs text-blue-800 dark:text-blue-300">
-                  User authentication is not yet implemented. Submissions are currently
-                  reviewed manually before appearing in the catalog. In a future version,
-                  a GitHub account will be required to submit or manage projects.
+                <p className="mt-0.5 text-xs text-emerald-200/80">
+                  Submissions are reviewed manually before appearing in the catalog. If a
+                  GitHub repository is provided, it must be public and valid.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Success state */}
           {result?.ok && (
-            <div className="mb-8 rounded-xl border border-emerald-200 bg-emerald-50/80 p-5 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+            <div className="mb-8 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-5 text-sm text-emerald-100">
               <div className="flex items-start gap-3">
                 <span className="text-xl" aria-hidden="true">✅</span>
                 <div>
-                  <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                  <p className="font-semibold text-emerald-100">
                     {result.name ? `"${result.name}" submitted!` : "Submission received!"}
                   </p>
-                  <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-300">
+                  <p className="mt-1 text-xs text-emerald-200/80">
                     {result.message}
                   </p>
-                  <a
+                  <Link
                     href="/"
-                    className="mt-3 inline-flex items-center text-xs font-medium text-emerald-700 underline hover:no-underline dark:text-emerald-400"
+                    className="mt-3 inline-flex items-center text-xs font-medium text-emerald-200 underline hover:no-underline"
                   >
                     ← Back to catalog
-                  </a>
+                  </Link>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Global error state */}
           {result && !result.ok && (
-            <div className="mb-8 rounded-xl border border-rose-200 bg-rose-50/80 p-4 text-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+            <div className="mb-8 rounded-xl border border-rose-500/25 bg-rose-500/10 p-4 text-sm text-rose-100">
               <div className="flex items-start gap-3">
                 <span className="text-xl" aria-hidden="true">⚠️</span>
-                <p className="text-rose-900 dark:text-rose-200">{result.message}</p>
+                <p className="text-rose-100">{result.message}</p>
               </div>
             </div>
           )}
 
-          {/* Submission form */}
           {!result?.ok && (
             <form
               onSubmit={handleSubmit}
               noValidate
-              className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_20px_60px_rgba(15,23,42,0.14)] backdrop-blur-xl"
             >
               <div className="space-y-6">
-                {/* GitHub URL */}
                 <div>
                   <label
-                    htmlFor="githubUrl"
-                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    htmlFor="name"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
                   >
-                    GitHub Repository URL
-                    <span className="ml-1 text-rose-500" aria-hidden="true">*</span>
+                    Project name
+                    <span className="ml-1 text-rose-400" aria-hidden="true">*</span>
                   </label>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                    e.g.{" "}
-                    <code className="rounded bg-zinc-100 px-1 py-0.5 text-[11px] dark:bg-zinc-800">
-                      https://github.com/username/repository-name
-                    </code>
-                  </p>
                   <input
-                    id="githubUrl"
-                    name="githubUrl"
-                    type="url"
-                    required
-                    value={form.githubUrl}
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={form.name}
                     onChange={handleChange}
-                    placeholder="https://github.com/username/my-artcraft-project"
-                    aria-describedby={fieldErrors.githubUrl ? "githubUrl-error" : undefined}
-                    aria-invalid={!!fieldErrors.githubUrl}
-                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 shadow-sm transition-colors focus:outline-none focus:ring-2 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 ${
-                      fieldErrors.githubUrl
+                    placeholder="My ArtCraft Project"
+                    aria-describedby={fieldErrors.name ? "name-error" : undefined}
+                    aria-invalid={!!fieldErrors.name}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.name
                         ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
-                        : "border-zinc-300 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-zinc-700"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
                     }`}
                   />
-                  {fieldErrors.githubUrl && (
-                    <p id="githubUrl-error" className="mt-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
-                      {fieldErrors.githubUrl}
+                  {fieldErrors.name && (
+                    <p id="name-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.name}
                     </p>
                   )}
                 </div>
 
-                {/* Category */}
+                <div>
+                  <label
+                    htmlFor="authorName"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    Author name or pseudonym
+                    <span className="ml-1 text-rose-400" aria-hidden="true">*</span>
+                  </label>
+                  <input
+                    id="authorName"
+                    name="authorName"
+                    type="text"
+                    value={form.authorName}
+                    onChange={handleChange}
+                    placeholder="Your name, nickname or project lead"
+                    aria-describedby={fieldErrors.author_name ? "authorName-error" : undefined}
+                    aria-invalid={!!fieldErrors.author_name}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.author_name
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  />
+                  {fieldErrors.author_name && (
+                    <p id="authorName-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.author_name}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="goal"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    Goal or problem to solve
+                    <span className="text-xs font-normal text-[var(--text-muted)]"> (optional)</span>
+                  </label>
+                  <textarea
+                    id="goal"
+                    name="goal"
+                    rows={3}
+                    value={form.goal}
+                    onChange={handleChange}
+                    placeholder="What need does this project address? What is its main purpose?"
+                    aria-describedby={fieldErrors.goal ? "goal-error" : undefined}
+                    aria-invalid={!!fieldErrors.goal}
+                    className={`mt-2 block w-full resize-none rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.goal
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  />
+                  {fieldErrors.goal && (
+                    <p id="goal-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.goal}
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label
                     htmlFor="category"
-                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
                   >
                     Category
-                    <span className="ml-1 text-rose-500" aria-hidden="true">*</span>
+                    <span className="ml-1 text-rose-400" aria-hidden="true">*</span>
                   </label>
                   <select
                     id="category"
@@ -237,38 +515,164 @@ export default function SubmitPage() {
                     onChange={handleChange}
                     aria-describedby={fieldErrors.category ? "category-error" : undefined}
                     aria-invalid={!!fieldErrors.category}
-                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-zinc-900 shadow-sm transition-colors focus:outline-none focus:ring-2 dark:bg-zinc-800 dark:text-zinc-100 ${
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
                       fieldErrors.category
                         ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
-                        : "border-zinc-300 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-zinc-700"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
                     }`}
                   >
                     <option value="" disabled>
                       Select a category…
                     </option>
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
+                    {categories.map((category) => (
+                      <option key={category.name} value={category.name}>{category.display_name || category.name}</option>
                     ))}
                   </select>
+                  {categoryCatalogUnavailable && categories.length === 0 && <p className="mt-1 text-xs text-rose-400">The category catalog is unavailable. Please try again later.</p>}
                   {fieldErrors.category && (
-                    <p id="category-error" className="mt-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
+                    <p id="category-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.category}
                     </p>
                   )}
                 </div>
 
-                {/* Description */}
+                <div>
+                  <label
+                    htmlFor="status"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    Status
+                    <span className="ml-1 text-rose-400" aria-hidden="true">*</span>
+                  </label>
+                  <select
+                    id="status"
+                    name="status"
+                    value={form.status}
+                    onChange={handleChange}
+                    aria-describedby={fieldErrors.status ? "status-error" : undefined}
+                    aria-invalid={!!fieldErrors.status}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.status
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  >
+                    <option value="Proposed">Proposed</option>
+                    <option value="Seeking collaborators">Seeking collaborators</option>
+                    <option value="In development">In development</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                  {fieldErrors.status && (
+                    <p id="status-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.status}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="githubUrl"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    GitHub Repository URL
+                    <span className="text-xs font-normal text-[var(--text-muted)]"> (optional)</span>
+                  </label>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Add a public GitHub repository if available. Leave blank for a project
+                    that is not yet tied to a GitHub repo.
+                  </p>
+                  <input
+                    id="githubUrl"
+                    name="githubUrl"
+                    type="url"
+                    value={form.githubUrl}
+                    onChange={handleChange}
+                    placeholder="https://github.com/username/my-artcraft-project"
+                    aria-describedby={fieldErrors.githubUrl ? "githubUrl-error" : undefined}
+                    aria-invalid={!!fieldErrors.githubUrl}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.githubUrl
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  />
+                  {fieldErrors.githubUrl && (
+                    <p id="githubUrl-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.githubUrl}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="websiteUrl"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    Website URL
+                    <span className="text-xs font-normal text-[var(--text-muted)]"> (optional)</span>
+                  </label>
+                  <input
+                    id="websiteUrl"
+                    name="websiteUrl"
+                    type="url"
+                    value={form.websiteUrl}
+                    onChange={handleChange}
+                    placeholder="https://example.com"
+                    aria-describedby={fieldErrors.website_url ? "websiteUrl-error" : undefined}
+                    aria-invalid={!!fieldErrors.website_url}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.website_url
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  />
+                  {fieldErrors.website_url && (
+                    <p id="websiteUrl-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.website_url}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="discussionUrl"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
+                  >
+                    Discussion URL
+                    <span className="text-xs font-normal text-[var(--text-muted)]"> (optional)</span>
+                  </label>
+                  <input
+                    id="discussionUrl"
+                    name="discussionUrl"
+                    type="url"
+                    value={form.discussionUrl}
+                    onChange={handleChange}
+                    placeholder="https://community.example.com/topic/123"
+                    aria-describedby={fieldErrors.discussion_url ? "discussionUrl-error" : undefined}
+                    aria-invalid={!!fieldErrors.discussion_url}
+                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
+                      fieldErrors.discussion_url
+                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
+                    }`}
+                  />
+                  {fieldErrors.discussion_url && (
+                    <p id="discussionUrl-error" className="mt-1 text-xs text-rose-400" role="alert">
+                      {fieldErrors.discussion_url}
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label
                     htmlFor="description"
-                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
                   >
                     Description
-                    <span className="ml-1 text-rose-500" aria-hidden="true">*</span>
+                    <span className="ml-1 text-rose-400" aria-hidden="true">*</span>
                   </label>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                     Briefly describe what the project does (20 to 500 characters).
                   </p>
                   <textarea
@@ -281,71 +685,192 @@ export default function SubmitPage() {
                     placeholder="Describe your project: what it does, who it's for, and what makes it useful for ArtCraft creators…"
                     aria-describedby={fieldErrors.description ? "description-error" : "description-hint"}
                     aria-invalid={!!fieldErrors.description}
-                    className={`mt-2 block w-full resize-none rounded-lg border px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 shadow-sm transition-colors focus:outline-none focus:ring-2 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 ${
+                    className={`mt-2 block w-full resize-none rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:outline-none focus:ring-2 bg-[var(--surface-strong)] ${
                       fieldErrors.description
                         ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
-                        : "border-zinc-300 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-zinc-700"
+                        : "border-[var(--border)] focus:border-emerald-500 focus:ring-emerald-500/20"
                     }`}
                   />
                   <p
                     id="description-hint"
-                    className="mt-1 text-right text-[11px] text-zinc-400"
+                    className="mt-1 text-right text-[11px] text-[var(--text-muted)]"
                     aria-live="polite"
                   >
                     {form.description.length} / 500
                   </p>
                   {fieldErrors.description && (
-                    <p id="description-error" className="mt-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
+                    <p id="description-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.description}
                     </p>
                   )}
                 </div>
 
-                {/* Tags */}
                 <div>
                   <label
-                    htmlFor="tags"
-                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    htmlFor="tag-search"
+                    className="block text-sm font-medium text-[var(--text-soft)]"
                   >
-                    Tags{" "}
-                    <span className="text-xs font-normal text-zinc-400">(optional)</span>
+                    Tags <span className="text-xs font-normal text-[var(--text-muted)]">(optional)</span>
                   </label>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                    Comma-separated, lowercase, no spaces. Up to 10 tags.{" "}
-                    <span className="text-zinc-400">
-                      e.g. shaders, post-process, glsl
-                    </span>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Choose from existing canonical tags and known aliases. Up to 10 tags.
                   </p>
-                  <input
-                    id="tags"
-                    name="tags"
-                    type="text"
-                    value={form.tags}
-                    onChange={handleChange}
-                    placeholder="modding, cli, voxels, open-source"
-                    aria-describedby={fieldErrors.tags ? "tags-error" : undefined}
-                    aria-invalid={!!fieldErrors.tags}
-                    className={`mt-2 block w-full rounded-lg border px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 shadow-sm transition-colors focus:outline-none focus:ring-2 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 ${
-                      fieldErrors.tags
-                        ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
-                        : "border-zinc-300 focus:border-emerald-500 focus:ring-emerald-500/20 dark:border-zinc-700"
-                    }`}
-                  />
+                  {tagCatalogUnavailable && (
+                    <p className="mt-2 text-xs text-amber-300" role="status">
+                      The tag catalog is unavailable. You can continue without tags; new tags must be added to the catalog by a moderator.
+                    </p>
+                  )}
+
+                  <div className="mt-2 relative">
+                    <input
+                      id="tag-search"
+                      ref={tagInputRef}
+                      type="text"
+                      value={tagInput}
+                      onChange={(event) => {
+                        setTagInput(event.target.value);
+                        setActiveTagIndex(0);
+                      }}
+                      onKeyDown={handleTagKeyDown}
+                      placeholder="Search tags like shaders, weather, nodes…"
+                      className="block w-full rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] shadow-sm transition-colors focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      aria-label="Search and select project tags"
+                      aria-autocomplete="list"
+                      aria-controls="tag-suggestions"
+                    />
+
+                    {selectedTags.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
+                        {selectedTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setSelectedTags((prev) => prev.filter((item) => item !== tag))}
+                            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-100 transition hover:bg-emerald-500/20"
+                            aria-label={`Remove ${tag} tag`}
+                          >
+                            {tag}
+                            <span aria-hidden="true">×</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {tagInput.trim() && filteredTagSuggestions.length > 0 && (
+                      <ul
+                        id="tag-suggestions"
+                        role="listbox"
+                        aria-label="Suggested tags"
+                        className="absolute z-20 mt-2 max-h-52 w-full overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl"
+                      >
+                        {filteredTagSuggestions.map((suggestion, index) => (
+                          <li key={`${suggestion.value}-${index}`}>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={index === activeTagIndex}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => addSelectedTag(suggestion)}
+                              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
+                                index === activeTagIndex
+                                  ? "bg-emerald-500/15 text-emerald-100"
+                                  : "text-[var(--text)] hover:bg-white/5"
+                              }`}
+                            >
+                              <span>{suggestion.displayLabel}</span>
+                              {suggestion.isAlias && (
+                                <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
+                                  alias
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {tagInput.trim() && filteredTagSuggestions.length === 0 && (
+                      <div className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                        No matching tags found. Try a broader keyword like “shader”, “weather”, “multiplayer”, or “editor”.
+                      </div>
+                    )}
+                  </div>
+
                   {fieldErrors.tags && (
-                    <p id="tags-error" className="mt-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
+                    <p id="tags-error" className="mt-1 text-xs text-rose-400" role="alert">
                       {fieldErrors.tags}
                     </p>
                   )}
                 </div>
 
-                {/* Submit button */}
+                <div>
+                  <label htmlFor="application-search" className="block text-sm font-medium text-[var(--text-soft)]">
+                    Replaces / Alternatives to <span className="text-xs font-normal text-[var(--text-muted)]">(optional)</span>
+                  </label>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    Select an existing application, then describe how this project compares to it.
+                  </p>
+                  <input
+                    id="application-search"
+                    type="search"
+                    value={applicationInput}
+                    onChange={(event) => setApplicationInput(event.target.value)}
+                    placeholder="Search applications, for example Photoshop…"
+                    className="mt-2 block w-full rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2.5 text-sm text-[var(--text)] placeholder-[var(--text-muted)] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    aria-label="Search existing applications to replace"
+                    aria-controls="application-suggestions"
+                  />
+                  {selectedReplacements.length > 0 && (
+                    <ul className="mt-3 space-y-2" aria-label="Selected replacement applications">
+                      {selectedReplacements.map(({ application, level }) => (
+                        <li key={application.id} className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <span className="text-sm font-medium text-[var(--text)]">{application.name}</span>
+                          <div className="flex items-center gap-2">
+                            <label className="sr-only" htmlFor={`replacement-level-${application.id}`}>Replacement level for {application.name}</label>
+                            <select
+                              id={`replacement-level-${application.id}`}
+                              value={level}
+                              onChange={(event) => setSelectedReplacements((items) => items.map((item) => item.application.id === application.id ? { ...item, level: event.target.value as ReplacementLevel } : item))}
+                              className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2.5 py-2 text-xs text-[var(--text)]"
+                            >
+                              <option value="Complete">Full alternative</option>
+                              <option value="Partial">Covers some features</option>
+                              <option value="Specialized">Specialized alternative</option>
+                            </select>
+                            <button type="button" onClick={() => setSelectedReplacements((items) => items.filter((item) => item.application.id !== application.id))} className="rounded-md px-2 py-2 text-xs text-rose-300 hover:bg-rose-500/10" aria-label={`Remove ${application.name}`}>Remove</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {applicationInput.trim() && filteredApplications.length > 0 && (
+                    <ul id="application-suggestions" role="listbox" aria-label="Existing application matches" className="mt-2 max-h-52 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl">
+                      {filteredApplications.map((application) => (
+                        <li key={application.id}>
+                          <button type="button" role="option" aria-selected="false" onClick={() => { setSelectedReplacements((items) => [...items, { application, level: "Partial" }]); setApplicationInput(""); }} className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-emerald-500/10">
+                            {application.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {applicationInput.trim() && filteredApplications.length === 0 && (
+                    <p className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]" role="status">
+                      No matching application found. Only applications already in the shared catalog can be selected; ask a moderator to add a missing one.
+                    </p>
+                  )}
+                  {applicationsUnavailable && (
+                    <p className="mt-2 text-xs text-amber-300" role="status">The application catalog is unavailable. You can still submit without replacement information.</p>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between pt-2">
-                  <a
+                  <Link
                     href="/"
                     className="text-xs font-medium text-zinc-500 hover:text-zinc-700 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
                   >
                     ← Back to catalog
-                  </a>
+                  </Link>
                   <button
                     type="submit"
                     disabled={isPending}

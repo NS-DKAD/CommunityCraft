@@ -1,9 +1,15 @@
-import { ProjectCategory } from "@/types/project";
+import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
 
 export interface SubmissionInput {
-  githubUrl: string;
+  name?: string;
+  goal?: string;
+  githubUrl?: string;
+  websiteUrl?: string;
+  discussionUrl?: string;
+  authorName?: string;
   description: string;
   category: ProjectCategory;
+  status?: string;
   tags: string[];
 }
 
@@ -16,17 +22,19 @@ export interface ValidationResult {
   valid: boolean;
   errors: SubmissionValidationError[];
   normalizedUrl?: string;
+  normalizedWebsiteUrl?: string;
+  normalizedDiscussionUrl?: string;
   owner?: string;
   repo?: string;
 }
 
-const VALID_CATEGORIES: ProjectCategory[] = [
-  "Tools",
-  "Mods",
-  "Shaders",
-  "Rendering & Assets",
-  "Libraries",
-];
+const VALID_STATUSES = [
+  "Proposed",
+  "Seeking collaborators",
+  "In development",
+  "Completed",
+  "Inactive",
+] as const;
 
 const GITHUB_URL_PATTERN =
   /^https:\/\/github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(\.git)?$/;
@@ -35,33 +43,63 @@ const MAX_DESCRIPTION_LENGTH = 500;
 const MAX_TAG_COUNT = 10;
 const MAX_TAG_LENGTH = 32;
 const TAG_PATTERN = /^[a-z0-9_-]+$/;
+const URL_PATTERN = /^https?:\/\//i;
 
 /**
  * Validates submission input on the server side.
  * Returns normalized values if valid.
  */
 export function validateSubmissionInput(
-  input: Partial<SubmissionInput>
+  input: Partial<SubmissionInput>,
+  allowedCategories: readonly string[] = PROJECT_CATEGORIES
 ): ValidationResult {
   const errors: SubmissionValidationError[] = [];
 
-  // GitHub URL validation
+  const rawName = (input.name ?? "").trim();
+  if (!rawName) {
+    errors.push({ field: "name", message: "Project name is required." });
+  } else if (rawName.length > 120) {
+    errors.push({
+      field: "name",
+      message: "Project name must not exceed 120 characters.",
+    });
+  }
+
+  const rawGoal = (input.goal ?? "").trim();
+  if (rawGoal && rawGoal.length > 500) {
+    errors.push({
+      field: "goal",
+      message: "Project goal must not exceed 500 characters.",
+    });
+  }
+
+  const rawAuthorName = (input.authorName ?? "").trim();
+  if (!rawAuthorName) {
+    errors.push({
+      field: "author_name",
+      message: "Author name or pseudonym is required.",
+    });
+  } else if (rawAuthorName.length > 100) {
+    errors.push({
+      field: "author_name",
+      message: "Author name must not exceed 100 characters.",
+    });
+  }
+
   const rawUrl = (input.githubUrl ?? "").trim();
   let normalizedUrl: string | undefined;
   let owner: string | undefined;
   let repo: string | undefined;
 
-  if (!rawUrl) {
-    errors.push({ field: "githubUrl", message: "GitHub repository URL is required." });
-  } else {
-    // Strip trailing slashes and .git suffix for normalization
+  if (rawUrl) {
     const cleaned = rawUrl.replace(/\/+$/, "").replace(/\.git$/, "");
     const match = GITHUB_URL_PATTERN.exec(cleaned) ?? GITHUB_URL_PATTERN.exec(rawUrl);
+
     if (!match) {
       errors.push({
         field: "githubUrl",
         message:
-          "Must be a valid GitHub repository URL (https://github.com/owner/repo).",
+          "If provided, GitHub must be a valid repository URL (https://github.com/owner/repo).",
       });
     } else {
       owner = match[1];
@@ -70,7 +108,32 @@ export function validateSubmissionInput(
     }
   }
 
-  // Description validation
+  const rawWebsiteUrl = (input.websiteUrl ?? "").trim();
+  let normalizedWebsiteUrl: string | undefined;
+  if (rawWebsiteUrl) {
+    if (!URL_PATTERN.test(rawWebsiteUrl)) {
+      errors.push({
+        field: "website_url",
+        message: "Website URL must start with http:// or https://.",
+      });
+    } else {
+      normalizedWebsiteUrl = rawWebsiteUrl;
+    }
+  }
+
+  const rawDiscussionUrl = (input.discussionUrl ?? "").trim();
+  let normalizedDiscussionUrl: string | undefined;
+  if (rawDiscussionUrl) {
+    if (!URL_PATTERN.test(rawDiscussionUrl)) {
+      errors.push({
+        field: "discussion_url",
+        message: "Discussion URL must start with http:// or https://.",
+      });
+    } else {
+      normalizedDiscussionUrl = rawDiscussionUrl;
+    }
+  }
+
   const desc = (input.description ?? "").trim();
   if (!desc) {
     errors.push({ field: "description", message: "Description is required." });
@@ -86,15 +149,18 @@ export function validateSubmissionInput(
     });
   }
 
-  // Category validation
   const cat = input.category;
   if (!cat) {
     errors.push({ field: "category", message: "Category is required." });
-  } else if (!VALID_CATEGORIES.includes(cat)) {
+  } else if (cat.trim().toLocaleLowerCase() === "by artcraft" || !allowedCategories.includes(cat)) {
     errors.push({ field: "category", message: "Invalid category selected." });
   }
 
-  // Tags validation
+  const status = (input.status ?? "Proposed").trim();
+  if (status && !VALID_STATUSES.includes(status as (typeof VALID_STATUSES)[number])) {
+    errors.push({ field: "status", message: "Invalid status selected." });
+  }
+
   const tags = Array.isArray(input.tags) ? input.tags : [];
   if (tags.length > MAX_TAG_COUNT) {
     errors.push({
@@ -125,6 +191,8 @@ export function validateSubmissionInput(
     valid: errors.length === 0,
     errors,
     normalizedUrl,
+    normalizedWebsiteUrl,
+    normalizedDiscussionUrl,
     owner,
     repo,
   };
@@ -151,7 +219,9 @@ export interface GitHubRepoMetadata {
 export async function fetchGitHubRepoMetadata(
   owner: string,
   repo: string
-): Promise<{ ok: true; data: GitHubRepoMetadata } | { ok: false; status: number; message: string }> {
+): Promise<
+  { ok: true; data: GitHubRepoMetadata } | { ok: false; status: number; message: string }
+> {
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
 
   try {
@@ -161,7 +231,6 @@ export async function fetchGitHubRepoMetadata(
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "CommunityCraft-App",
       },
-      // Do not cache at the Next.js layer — this is a submission flow
       next: { revalidate: 0 },
     });
 
@@ -228,4 +297,113 @@ export function slugFromGitHubFullName(fullName: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+export function slugFromText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60) || "project";
+}
+
+export interface ContributionRequestInput {
+  displayName: string;
+  contactType: string;
+  contact: string;
+  skills: string;
+  contributionType: string;
+  message?: string;
+}
+
+export interface ProjectReportInput {
+  reporterName?: string;
+  reason: string;
+  details?: string;
+}
+
+export interface ContributionValidationResult {
+  valid: boolean;
+  errors: SubmissionValidationError[];
+}
+
+const VALID_CONTACT_TYPES = ["email", "discord", "github", "website", "other"] as const;
+const VALID_CONTRIBUTION_TYPES = ["coding", "design", "testing", "documentation", "community", "other"] as const;
+const VALID_REPORT_REASONS = ["misleading", "suspicious", "broken_link", "spam", "other"] as const;
+
+export function validateContributionRequestInput(
+  input: Partial<ContributionRequestInput>
+): ContributionValidationResult {
+  const errors: SubmissionValidationError[] = [];
+
+  const displayName = (input.displayName ?? "").trim();
+  if (!displayName) {
+    errors.push({ field: "displayName", message: "Name or pseudonym is required." });
+  } else if (displayName.length < 2 || displayName.length > 80) {
+    errors.push({
+      field: "displayName",
+      message: "Name or pseudonym must be between 2 and 80 characters.",
+    });
+  }
+
+  const contactType = (input.contactType ?? "").trim();
+  if (!contactType || !(VALID_CONTACT_TYPES as readonly string[]).includes(contactType)) {
+    errors.push({ field: "contactType", message: "Please select a valid contact method." });
+  }
+
+  const contact = (input.contact ?? "").trim();
+  if (!contact) {
+    errors.push({ field: "contact", message: "Contact information is required." });
+  } else if (contact.length > 200) {
+    errors.push({ field: "contact", message: "Contact information is too long." });
+  }
+
+  const skills = (input.skills ?? "").trim();
+  if (!skills) {
+    errors.push({ field: "skills", message: "Skills or area of contribution is required." });
+  } else if (skills.length > 200) {
+    errors.push({ field: "skills", message: "Skills field must not exceed 200 characters." });
+  }
+
+  const contributionType = (input.contributionType ?? "").trim();
+  if (!contributionType || !(VALID_CONTRIBUTION_TYPES as readonly string[]).includes(contributionType)) {
+    errors.push({ field: "contributionType", message: "Please choose how you want to contribute." });
+  }
+
+  const message = (input.message ?? "").trim();
+  if (message && message.length > 800) {
+    errors.push({ field: "message", message: "Message must not exceed 800 characters." });
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateProjectReportInput(
+  input: Partial<ProjectReportInput>
+): ContributionValidationResult {
+  const errors: SubmissionValidationError[] = [];
+
+  const reason = (input.reason ?? "").trim();
+  if (!reason || !(VALID_REPORT_REASONS as readonly string[]).includes(reason)) {
+    errors.push({ field: "reason", message: "Please select a valid report reason." });
+  }
+
+  const reporterName = (input.reporterName ?? "").trim();
+  if (reporterName && reporterName.length > 80) {
+    errors.push({
+      field: "reporterName",
+      message: "Reporter name must not exceed 80 characters.",
+    });
+  }
+
+  const details = (input.details ?? "").trim();
+  if (details && details.length > 800) {
+    errors.push({
+      field: "details",
+      message: "Report details must not exceed 800 characters.",
+    });
+  }
+
+  return { valid: errors.length === 0, errors };
 }
