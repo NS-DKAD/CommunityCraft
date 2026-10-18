@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 .roomodes
+
+docs/mvp-scope.md
+docs/AGENTS_RELAY.md
+PROJECT_CONTEXT.md
+docs/related-projects.md

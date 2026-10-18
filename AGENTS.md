@@ -21,7 +21,7 @@ CommunityCraft est un annuaire communautaire indépendant et un espace de décou
 - La modération est nécessaire pour limiter le spam, les abus et les contenus malveillants.
 - Les badges officiels ou vérifiés ne peuvent être attribués que par des responsables autorisés.
 - Le site doit rester indépendant et ne pas prétendre être officiel sans autorisation.
-- Les demandes hors MVP (comptes/propriété, import GitHub, bot Discord, analyse IA, etc.) sont dans `requested_Features.md` : les noter et les refuser, sauf si Danny insiste.
+- Les demandes hors MVP (comptes/propriété, import GitHub, bot Discord, analyse IA, etc.) sont dans `requested_Features.md` : les noter et les refuser, sauf si Operateur insiste.
 
 ## 3. Principes techniques
 
@@ -125,7 +125,7 @@ Reste dans le scope MVP (`docs/mvp-scope.md` + ce qui est nécessaire pour qu'il
 
 Les étapes documentées 1–7 (collab/RLS, Discover tags, migration `20261020`, contrôles `20261019`, éditeur tags `20261018`, setup admin OAuth, ne pas relancer `20261015`) sont **rapportées faites par le propriétaire**. Ne pas les rejouer (aucun SQL distant).
 
-Toute feature hors MVP va dans `requested_Features.md` : la noter et la **refuser**, sauf si Danny insiste.
+Toute feature hors MVP va dans `requested_Features.md` : la noter et la **refuser**, sauf si Operateur insiste.
 
 ## 12. Format des réponses
 

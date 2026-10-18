@@ -10,7 +10,7 @@ CommunityCraft est un annuaire communautaire indépendant et un espace de décou
 - Le site ne doit pas se présenter comme officiel sans autorisation.
 - Langue par défaut de l'interface et des données : anglais.
 
-Le périmètre produit est `docs/mvp-scope.md`. Les demandes hors MVP sont dans `requested_Features.md` (noter et refuser, sauf insistence de Danny).
+Le périmètre produit est `docs/mvp-scope.md`. Les demandes hors MVP sont dans `requested_Features.md` (noter et refuser, sauf insistence de Operateur).
 
 ## 2. État actuel connu
 
@@ -29,12 +29,12 @@ Les cases ci-dessous distinguent le **code local**, les migrations **écrites**,
 
 L'agent n'a pas rejoué ces opérations. Ne pas relancer `20261015`.
 
-1. [x] Collab : persistance, confirmation après insert, RLS et notification admin — **rapportées vérifiées** par Danny.
-2. [x] Discover : navigation parmi les tags — **rapportée faite** par Danny.
-3. [x] `20261020_admin_project_reports.sql` : **écrite** dans le dépôt ; **application distante rapportée** par Danny ; code admin de revue des signalements présent.
-4. [x] Contrôles post-`20261019_admin_project_categories.sql` (distribution + menus) — **rapportés faits** par Danny. Migration **écrite** ; **application rapportée** (« Success. No rows returned »).
-5. [x] Éditeur d'apparence des tags (`20261018`) — migration **écrite** ; **application rapportée** ; UI **rapportée validée** par Danny.
-6. [x] Setup admin OAuth Discord + premier UUID allowlist + parcours authentifié — **rapportés faits** par Danny.
+1. [x] Collab : persistance, confirmation après insert, RLS et notification admin — **rapportées vérifiées** par Operateur.
+2. [x] Discover : navigation parmi les tags — **rapportée faite** par Operateur.
+3. [x] `20261020_admin_project_reports.sql` : **écrite** dans le dépôt ; **application distante rapportée** par Operateur ; code admin de revue des signalements présent.
+4. [x] Contrôles post-`20261019_admin_project_categories.sql` (distribution + menus) — **rapportés faits** par Operateur. Migration **écrite** ; **application rapportée** (« Success. No rows returned »).
+5. [x] Éditeur d'apparence des tags (`20261018`) — migration **écrite** ; **application rapportée** ; UI **rapportée validée** par Operateur.
+6. [x] Setup admin OAuth Discord + premier UUID allowlist + parcours authentifié — **rapportés faits** par Operateur.
 7. [x] Consigne durable : ne pas relancer `20261015_normalize_tags_and_categories.sql`.
 
 ### Tags / catégories / Replacing (code + rapports)
@@ -66,9 +66,9 @@ Sélectionnables : `Software`, `Website`, `Plugin`, `Games` et `Mods`.
 
 ## 6. Tâches restantes pour un MVP opérationnel
 
-**P0 — clos** (étapes 1–7 rapportées faites par Danny, 2026-10-17). Aucun blocage P0 documenté.
+**P0 — clos** (étapes 1–7 rapportées faites par Operateur, 2026-10-17). Aucun blocage P0 documenté.
 
-**P1 — éviter la perte de travail admin** (en cours / implémenté localement le 2026-10-17 ; à valider dans le panel authentifié si pas déjà fait par Danny)
+**P1 — éviter la perte de travail admin** (en cours / implémenté localement le 2026-10-17 ; à valider dans le panel authentifié si pas déjà fait par Operateur)
 
 - Empêcher la perte silencieuse en changeant de fiche ou de section.
 - Brouillons conservés entre sélections ; état non sauvegardé visible.
@@ -96,7 +96,7 @@ Dernières vérifications exécutées (2026-10-17) :
 - `npm test` : 7 suites, 72 tests passés avec succès (+ suite `user-journey.test.ts`).
 - `npx next build --webpack` : **SUCCÈS CONFIRMÉ** (14 pages/routes générées dont `robots.txt` et `sitemap.xml`, 0 erreur).
 
-Les contrôles locaux confirment l'intégrité du code applicatif. Danny rapporte que les étapes 1–7 distantes/UI sont faites.
+Les contrôles locaux confirment l'intégrité du code applicatif. Operateur rapporte que les étapes 1–7 distantes/UI sont faites.
 
 
 ## 8. Garde-fous
