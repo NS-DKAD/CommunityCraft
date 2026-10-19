@@ -73,6 +73,7 @@ export default function SubmitPage() {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [isPending, startTransition] = useTransition();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [proposedTags, setProposedTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [tagSuggestions, setTagSuggestions] = useState<TagSuggestion[]>([]);
   const [tagCatalogUnavailable, setTagCatalogUnavailable] = useState(false);
@@ -81,6 +82,7 @@ export default function SubmitPage() {
   const [applications, setApplications] = useState<ApplicationOption[]>([]);
   const [applicationInput, setApplicationInput] = useState("");
   const [selectedReplacements, setSelectedReplacements] = useState<SelectedReplacement[]>([]);
+  const [proposedReplacements, setProposedReplacements] = useState<Array<{ name: string; level: ReplacementLevel }>>([]);
   const [applicationsUnavailable, setApplicationsUnavailable] = useState(false);
   const [categories, setCategories] = useState<SubmitCategory[]>(DEFAULT_CATEGORIES);
   const [categoryCatalogUnavailable, setCategoryCatalogUnavailable] = useState(false);
@@ -235,6 +237,32 @@ export default function SubmitPage() {
     tagInputRef.current?.focus();
   }
 
+  function addProposedTag(rawTag: string) {
+    const token = normalizeTagToken(rawTag);
+    if (!token || token.length < 2 || token.length > 32) return;
+    if (selectedTags.includes(token) || proposedTags.includes(token)) return;
+    if (selectedTags.length + proposedTags.length >= 10) return;
+
+    setProposedTags((prev) => [...prev, token]);
+    setTagInput("");
+    setActiveTagIndex(0);
+    tagInputRef.current?.focus();
+  }
+
+  function addProposedReplacement(name: string) {
+    const clean = name.trim();
+    if (!clean || clean.length < 2 || clean.length > 80) return;
+    const lower = clean.toLowerCase();
+    if (
+      selectedReplacements.some((item) => item.application.name.toLowerCase() === lower) ||
+      proposedReplacements.some((item) => item.name.toLowerCase() === lower)
+    ) return;
+    if (selectedReplacements.length + proposedReplacements.length >= 10) return;
+
+    setProposedReplacements((prev) => [...prev, { name: clean, level: "Partial" }]);
+    setApplicationInput("");
+  }
+
   function handleTagKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (!filteredTagSuggestions.length) {
       if (event.key === "Enter") {
@@ -292,7 +320,9 @@ export default function SubmitPage() {
             category: form.category,
             status: form.status,
             tags,
+            proposedTags,
             replacements: selectedReplacements.map(({ application, level }) => ({ applicationId: application.id, level })),
+            proposedReplacements,
           }),
         });
 
@@ -739,7 +769,7 @@ export default function SubmitPage() {
                       aria-controls="tag-suggestions"
                     />
 
-                    {selectedTags.length > 0 && (
+                    {(selectedTags.length > 0 || proposedTags.length > 0) && (
                       <div className="mt-3 flex flex-wrap gap-2" aria-live="polite">
                         {selectedTags.map((tag) => (
                           <button
@@ -749,49 +779,78 @@ export default function SubmitPage() {
                             className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-100 transition hover:bg-emerald-500/20"
                             aria-label={`Remove ${tag} tag`}
                           >
-                            {tag}
+                            #{tag}
+                            <span aria-hidden="true">×</span>
+                          </button>
+                        ))}
+                        {proposedTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setProposedTags((prev) => prev.filter((item) => item !== tag))}
+                            className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-200 transition hover:bg-amber-500/20"
+                            aria-label={`Remove proposed ${tag} tag`}
+                            title="Proposed tag (pending moderator review)"
+                          >
+                            #{tag}
+                            <span className="text-[10px] text-amber-300 font-normal">(proposed)</span>
                             <span aria-hidden="true">×</span>
                           </button>
                         ))}
                       </div>
                     )}
 
-                    {tagInput.trim() && filteredTagSuggestions.length > 0 && (
-                      <ul
-                        id="tag-suggestions"
-                        role="listbox"
-                        aria-label="Suggested tags"
-                        className="absolute z-20 mt-2 max-h-52 w-full overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl"
-                      >
-                        {filteredTagSuggestions.map((suggestion, index) => (
-                          <li key={`${suggestion.value}-${index}`}>
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected={index === activeTagIndex}
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => addSelectedTag(suggestion)}
-                              className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
-                                index === activeTagIndex
-                                  ? "bg-emerald-500/15 text-emerald-100"
-                                  : "text-[var(--text)] hover:bg-white/5"
-                              }`}
-                            >
-                              <span>{suggestion.displayLabel}</span>
-                              {suggestion.isAlias && (
-                                <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
-                                  alias
-                                </span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    {tagInput.trim() && (
+                      <div className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl">
+                        {filteredTagSuggestions.length > 0 && (
+                          <ul id="tag-suggestions" role="listbox" aria-label="Suggested tags">
+                            {filteredTagSuggestions.map((suggestion, index) => (
+                              <li key={`${suggestion.value}-${index}`}>
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={index === activeTagIndex}
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => addSelectedTag(suggestion)}
+                                  className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${
+                                    index === activeTagIndex
+                                      ? "bg-emerald-500/15 text-emerald-100"
+                                      : "text-[var(--text)] hover:bg-white/5"
+                                  }`}
+                                >
+                                  <span>{suggestion.displayLabel}</span>
+                                  {suggestion.isAlias && (
+                                    <span className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]">
+                                      alias
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
 
-                    {tagInput.trim() && filteredTagSuggestions.length === 0 && (
-                      <div className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                        No matching tags found. Try a broader keyword like “shader”, “weather”, “multiplayer”, or “editor”.
+                        {normalizeTagToken(tagInput).length >= 2 &&
+                          !selectedTags.includes(normalizeTagToken(tagInput)) &&
+                          !proposedTags.includes(normalizeTagToken(tagInput)) && (
+                            <div className={filteredTagSuggestions.length > 0 ? "border-t border-[var(--border)] pt-1 mt-1" : ""}>
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => addProposedTag(tagInput)}
+                                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-amber-200 hover:bg-amber-500/10 transition"
+                              >
+                                <span>+ Propose new tag: <strong className="underline">#{normalizeTagToken(tagInput)}</strong></span>
+                                <span className="text-[11px] text-amber-300">Pending review</span>
+                              </button>
+                            </div>
+                          )}
+
+                        {filteredTagSuggestions.length === 0 && normalizeTagToken(tagInput).length < 2 && (
+                          <div className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                            No matching tags found. Type at least 2 characters to propose a custom tag.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -820,7 +879,7 @@ export default function SubmitPage() {
                     aria-label="Search existing applications to replace"
                     aria-controls="application-suggestions"
                   />
-                  {selectedReplacements.length > 0 && (
+                  {(selectedReplacements.length > 0 || proposedReplacements.length > 0) && (
                     <ul className="mt-3 space-y-2" aria-label="Selected replacement applications">
                       {selectedReplacements.map(({ application, level }) => (
                         <li key={application.id} className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -841,26 +900,68 @@ export default function SubmitPage() {
                           </div>
                         </li>
                       ))}
-                    </ul>
-                  )}
-                  {applicationInput.trim() && filteredApplications.length > 0 && (
-                    <ul id="application-suggestions" role="listbox" aria-label="Existing application matches" className="mt-2 max-h-52 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl">
-                      {filteredApplications.map((application) => (
-                        <li key={application.id}>
-                          <button type="button" role="option" aria-selected="false" onClick={() => { setSelectedReplacements((items) => [...items, { application, level: "Partial" }]); setApplicationInput(""); }} className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-emerald-500/10">
-                            {application.name}
-                          </button>
+                      {proposedReplacements.map(({ name, level }) => (
+                        <li key={name} className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-amber-200">{name}</span>
+                            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300 font-medium">Proposed</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <label className="sr-only" htmlFor={`proposed-level-${name}`}>Replacement level for {name}</label>
+                            <select
+                              id={`proposed-level-${name}`}
+                              value={level}
+                              onChange={(event) => setProposedReplacements((items) => items.map((item) => item.name === name ? { ...item, level: event.target.value as ReplacementLevel } : item))}
+                              className="rounded-md border border-amber-500/30 bg-[var(--bg)] px-2.5 py-2 text-xs text-amber-200"
+                            >
+                              <option value="Complete">Full alternative</option>
+                              <option value="Partial">Covers some features</option>
+                              <option value="Specialized">Specialized alternative</option>
+                            </select>
+                            <button type="button" onClick={() => setProposedReplacements((items) => items.filter((item) => item.name !== name))} className="rounded-md px-2 py-2 text-xs text-rose-300 hover:bg-rose-500/10" aria-label={`Remove proposed ${name}`}>Remove</button>
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
-                  {applicationInput.trim() && filteredApplications.length === 0 && (
-                    <p className="mt-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-xs text-[var(--text-muted)]" role="status">
-                      No matching application found. Only applications already in the shared catalog can be selected; ask a moderator to add a missing one.
-                    </p>
+                  {applicationInput.trim() && (
+                    <div className="mt-2 max-h-56 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-1 shadow-xl">
+                      {filteredApplications.length > 0 && (
+                        <ul id="application-suggestions" role="listbox" aria-label="Existing application matches">
+                          {filteredApplications.map((application) => (
+                            <li key={application.id}>
+                              <button type="button" role="option" aria-selected="false" onClick={() => { setSelectedReplacements((items) => [...items, { application, level: "Partial" }]); setApplicationInput(""); }} className="w-full rounded-md px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-emerald-500/10">
+                                {application.name}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {applicationInput.trim().length >= 2 &&
+                        !selectedReplacements.some((item) => item.application.name.toLowerCase() === applicationInput.trim().toLowerCase()) &&
+                        !proposedReplacements.some((item) => item.name.toLowerCase() === applicationInput.trim().toLowerCase()) && (
+                          <div className={filteredApplications.length > 0 ? "border-t border-[var(--border)] pt-1 mt-1" : ""}>
+                            <button
+                              type="button"
+                              onClick={() => addProposedReplacement(applicationInput)}
+                              className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm text-amber-200 hover:bg-amber-500/10 transition"
+                            >
+                              <span>+ Propose application: <strong className="underline">{applicationInput.trim()}</strong></span>
+                              <span className="text-[11px] text-amber-300">Pending review</span>
+                            </button>
+                          </div>
+                        )}
+
+                      {filteredApplications.length === 0 && applicationInput.trim().length < 2 && (
+                        <p className="px-3 py-2 text-xs text-[var(--text-muted)]">
+                          Type at least 2 characters to propose a custom application.
+                        </p>
+                      )}
+                    </div>
                   )}
                   {applicationsUnavailable && (
-                    <p className="mt-2 text-xs text-amber-300" role="status">The application catalog is unavailable. You can still submit without replacement information.</p>
+                    <p className="mt-2 text-xs text-amber-300" role="status">The application catalog is unavailable. You can still submit with proposed applications.</p>
                   )}
                 </div>
 

@@ -30,6 +30,11 @@ export interface ProjectReplacement {
   level: ReplacementLevel;
 }
 
+export interface ProposedReplacement {
+  name: string;
+  level: ReplacementLevel;
+}
+
 export interface Project {
   id: string;
   slug?: string;

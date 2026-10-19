@@ -10,7 +10,7 @@ CommunityCraft est un annuaire communautaire indépendant et un espace de décou
 - Le site ne doit pas se présenter comme officiel sans autorisation.
 - Langue par défaut de l'interface et des données : anglais.
 
-Le périmètre produit est `docs/mvp-scope.md`. Les demandes hors MVP sont dans `requested_Features.md` (noter et refuser, sauf insistence de Operateur).
+Le périmètre produit est `docs/mvp-scope.md`. Les demandes hors MVP sont dans `requested_Features.md` (noter et refuser, sauf insistence de Operateur). Les anomalies et défauts d'interface identifiés sont consignés dans `known_Bugs.md`.
 
 ## 2. État actuel connu
 
@@ -43,6 +43,7 @@ L'agent n'a pas rejoué ces opérations. Ne pas relancer `20261015`.
 - Catalogue tags rapporté : 25 `ASSOCIATED`, 3 `UNCATALOGUED` (`mcp`, `office`, `test`). Approuvés : `3D Modeling` (`3d-modeling`), `CAD`, `BREP`, `STEP`, `egui`, `WebAssembly` (`wasm`), `Web` ; `is_official=false`. Ne pas créer de tags depuis le texte libre.
 - `20261016_add_replacing_applications.sql` : **écrite** ; **application rapportée** (RLS, Photoshop). Code soumission/catalogue l'utilise.
 - `20261017_secure_admin_panel.sql` : **écrite** ; **application rapportée**.
+- `20261021_proposed_tags_and_replacements.sql` : **écrite** dans le dépôt ; ajoute `proposed_tags` et `proposed_replacements` + RPCs d'approbation admin sécurisées (`admin_approve_proposed_tag`, `admin_approve_proposed_application`). Code submit et admin prêt. En attente d'application distante par Operateur.
 - Catégories MVP actives : `Software`, `Website`, `Plugin`, `Games`, `Mods`. Historiques inactives : `Tools`, `Shaders`, `Rendering & Assets`, `Libraries`. « By ArtCraft » n'est pas une catégorie.
 
 ### Admin — brouillons (code local, 2026-10-17)

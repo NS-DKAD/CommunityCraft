@@ -11,6 +11,7 @@ export interface SubmissionInput {
   category: ProjectCategory;
   status?: string;
   tags: string[];
+  proposedTags?: string[];
 }
 
 export interface SubmissionValidationError {
@@ -162,10 +163,11 @@ export function validateSubmissionInput(
   }
 
   const tags = Array.isArray(input.tags) ? input.tags : [];
-  if (tags.length > MAX_TAG_COUNT) {
+  const proposedTags = Array.isArray(input.proposedTags) ? input.proposedTags : [];
+  if (tags.length + proposedTags.length > MAX_TAG_COUNT) {
     errors.push({
       field: "tags",
-      message: `Maximum ${MAX_TAG_COUNT} tags allowed.`,
+      message: `Maximum ${MAX_TAG_COUNT} tags in total allowed.`,
     });
   } else {
     for (const tag of tags) {
@@ -181,6 +183,23 @@ export function validateSubmissionInput(
         errors.push({
           field: "tags",
           message: `Tag "${t}" exceeds maximum length of ${MAX_TAG_LENGTH} characters.`,
+        });
+        break;
+      }
+    }
+    for (const tag of proposedTags) {
+      const t = tag.trim();
+      if (!TAG_PATTERN.test(t)) {
+        errors.push({
+          field: "tags",
+          message: `Proposed tag "${t}" is invalid. Only lowercase letters, numbers, hyphens and underscores are allowed.`,
+        });
+        break;
+      }
+      if (t.length < 2 || t.length > MAX_TAG_LENGTH) {
+        errors.push({
+          field: "tags",
+          message: `Proposed tag "${t}" must be between 2 and ${MAX_TAG_LENGTH} characters.`,
         });
         break;
       }

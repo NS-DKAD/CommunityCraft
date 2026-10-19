@@ -27,9 +27,14 @@ export default function Home({ searchParams }: HomeProps) {
 
           <div className="relative z-10 mx-auto max-w-[1400px] px-4 pb-16 pt-14 sm:px-6 lg:px-8 lg:pb-20 lg:pt-20">
             <div className="mx-auto max-w-4xl text-center">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.22em] text-[var(--text-soft)] backdrop-blur-sm shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_16px_rgba(16,185,129,0.7)]" />
-                Open Community Directory
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-1.5 text-[11px] font-medium tracking-[0.14em] text-[var(--text-soft)] backdrop-blur-sm shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.9)]" />
+                </span>
+                <span className="font-semibold uppercase tracking-[0.2em] text-[var(--text)]">Open Community Directory</span>
+                <span className="text-[var(--text-muted)]">·</span>
+                <span className="text-emerald-400 font-medium">Live Connected</span>
               </div>
 
               <h1 className="text-4xl font-black tracking-[-0.06em] text-[var(--text)] sm:text-5xl md:text-6xl lg:text-7xl">

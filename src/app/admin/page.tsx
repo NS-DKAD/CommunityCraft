@@ -56,7 +56,13 @@ async function AdminContent() {
     tagReadError = fallbackTags.error;
   }
 
-  const projects = (projectRows ?? []).map((project) => ({ ...project, tags: [], replacing: [] })) as AdminProject[];
+  const projects = (projectRows ?? []).map((project) => ({
+    ...project,
+    tags: [],
+    replacing: [],
+    proposed_tags: Array.isArray(project.proposed_tags) ? project.proposed_tags : [],
+    proposed_replacements: Array.isArray(project.proposed_replacements) ? project.proposed_replacements : [],
+  })) as AdminProject[];
   let tagsError: string | null = null;
   let replacementsError: string | null = null;
   if (projects.length > 0) {

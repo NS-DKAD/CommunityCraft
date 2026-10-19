@@ -76,7 +76,8 @@ html[data-theme="light"] {
 }
 
 ::selection {
-  background: rgba(17, 24, 39, 0.14);
+  background: #0284c7;
+  color: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

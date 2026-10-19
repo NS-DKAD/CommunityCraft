@@ -1,5 +1,6 @@
-"use client";
 
+
+"use client";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Project, ProjectCategory } from "@/types/project";
 import { matchesProjectCategory, matchesProjectQuery } from "@/lib/projects";
@@ -47,6 +48,8 @@ export function ProjectCatalog({
   }, [initialProjects, searchQuery, selectedCategory, selectedTag]);
 
   // Reset to first page when any search or filter criteria changes
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedCategory, selectedTag]);
@@ -69,39 +72,25 @@ export function ProjectCatalog({
   return (
     <section id="catalog" className="relative mx-auto max-w-[1500px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
       <div className="mb-8 rounded-[30px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-6">
-        {dataSource === "database" && (
-          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-[var(--success)] p-4 text-sm text-emerald-900">
-            <div className="flex items-start gap-3">
-              <span className="text-lg" aria-hidden="true">✓</span>
-              <div>
-                <p className="font-semibold">Live Database Connected</p>
-                <p className="mt-1 text-xs text-emerald-800/80">
-                  Displaying {initialProjects.length} approved projects from Supabase.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {dataSource === "error" && (
-          <div className="mb-6 rounded-2xl border border-rose-500/20 bg-[var(--danger)] p-4 text-sm text-rose-900">
+          <div className="mb-6 rounded-2xl border border-rose-500/20 bg-[var(--danger)] p-4 text-sm text-rose-300">
             <div className="flex items-start gap-3">
               <span className="text-lg" aria-hidden="true">⚠</span>
               <div>
-                <p className="font-semibold">Database Connection Issue</p>
-                <p className="mt-1 text-xs text-rose-800/80">{errorMessage || "Failed to load projects from Supabase."}</p>
+                <p className="font-semibold text-rose-200">Database Connection Issue</p>
+                <p className="mt-1 text-xs text-rose-300/80">{errorMessage || "Failed to load projects from Supabase."}</p>
               </div>
             </div>
           </div>
         )}
 
         {dataSource === "demo" && (
-          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-[var(--warning)] p-4 text-sm text-amber-900">
+          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-[var(--warning)] p-4 text-sm text-amber-300">
             <div className="flex items-start gap-3">
               <span className="text-lg" aria-hidden="true">ℹ</span>
               <div>
-                <p className="font-semibold">Demo Data Mode</p>
-                <p className="mt-1 text-xs text-amber-800/80">
+                <p className="font-semibold text-amber-200">Demo Data Mode</p>
+                <p className="mt-1 text-xs text-amber-300/80">
                   Sample catalog preview. Add Supabase keys to switch to the live directory.
                 </p>
               </div>
