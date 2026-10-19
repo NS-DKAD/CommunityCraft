@@ -135,7 +135,7 @@ Never commit `.env.local` or other secrets. Service-role keys must remain server
 - `supabase/seed.sql` — seed data.
 - `AGENTS.md` — persistent instructions for the coding agent.
 - `PROJECT_CONTEXT.md` — current project state and remaining in-scope tasks.
-- `requested_Features.md` — out-of-MVP requests (record and refuse unless Danny insists).
+- `requested_Features.md` — out-of-MVP requests (record and refuse unless Operateur insists).
 - `docs/mvp-scope.md` — MVP mission and in-scope capabilities.
 
 ## Product principles

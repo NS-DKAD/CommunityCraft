@@ -44,7 +44,7 @@ export function Header() {
             Discover
           </Link>
           <Link
-            href="/#catalog"
+            href="/#search-input"
             className="rounded-full px-3 py-1.5 text-sm text-[var(--text-soft)] transition-colors hover:bg-[var(--brand-soft)] hover:text-[var(--text)]"
           >
             Search
@@ -53,7 +53,7 @@ export function Header() {
             href="/#catalog"
             className="rounded-full px-3 py-1.5 text-sm text-[var(--text-soft)] transition-colors hover:bg-[var(--brand-soft)] hover:text-[var(--text)]"
           >
-            Tags
+            Catalog
           </Link>
         </nav>
 

@@ -10,7 +10,7 @@ import {
   isServiceClientConfigured,
 } from "@/lib/supabase/server-client";
 import { PROJECT_CATEGORIES, ProjectCategory } from "@/types/project";
-import { findUnknownApplicationIds, validateReplacementInput } from "@/lib/replacements";
+import { findUnknownApplicationIds, validateReplacementInput, validateProposedReplacementsInput } from "@/lib/replacements";
 import { getPersistenceHttpOutcome, persistProjectWithReplacements } from "@/lib/project-persistence";
 import { resolveSubmissionTags } from "@/lib/tags";
 
@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
       { status: 422 }
     );
   }
+  if (payload.proposedTags !== undefined && (!Array.isArray(payload.proposedTags) || payload.proposedTags.some((tag) => typeof tag !== "string"))) {
+    return NextResponse.json(
+      { error: "Proposed tags must be a list of strings.", fieldErrors: [{ field: "tags", message: "Proposed tags must be valid text strings." }] },
+      { status: 422 }
+    );
+  }
   const replacementValidation = validateReplacementInput(payload.replacements);
   if (!replacementValidation.valid) {
     return NextResponse.json(
@@ -90,7 +96,14 @@ export async function POST(request: NextRequest) {
       { status: 422 }
     );
   }
-  const { name, goal, authorName, githubUrl, websiteUrl, discussionUrl, description, category, status, tags } = payload;
+  const proposedReplacementsValidation = validateProposedReplacementsInput(payload.proposedReplacements);
+  if (!proposedReplacementsValidation.valid) {
+    return NextResponse.json(
+      { error: proposedReplacementsValidation.error ?? "Invalid proposed replacement applications.", fieldErrors: [{ field: "replacements", message: proposedReplacementsValidation.error ?? "Invalid proposed replacement applications." }] },
+      { status: 422 }
+    );
+  }
+  const { name, goal, authorName, githubUrl, websiteUrl, discussionUrl, description, category, status, tags, proposedTags } = payload;
 
   // Connect before validation so dynamic categories are still checked against
   // the canonical active catalog on the server. Only a missing migration uses
@@ -127,6 +140,7 @@ export async function POST(request: NextRequest) {
     category: typeof category === "string" ? (category as ProjectCategory) : undefined,
     status: typeof status === "string" ? status : "Proposed",
     tags: Array.isArray(tags) ? (tags as string[]) : [],
+    proposedTags: Array.isArray(proposedTags) ? (proposedTags as string[]) : [],
   }, allowedCategories);
 
   if (!validation.valid) {
@@ -272,6 +286,11 @@ export async function POST(request: NextRequest) {
   // 7. Prepare tags and insert the new project into the database
   const cleanTags = canonicalTags.map((tag) => tag.slug);
 
+  const cleanProposedTags = Array.isArray(proposedTags)
+    ? (proposedTags as string[]).map((t) => t.trim().toLowerCase()).filter(Boolean)
+    : [];
+  const cleanProposedReplacements = proposedReplacementsValidation.proposed;
+
   const insertPayload = {
     slug,
     name: projectName,
@@ -281,6 +300,8 @@ export async function POST(request: NextRequest) {
     status: projectStatus,
     category: category as ProjectCategory,
     tags: cleanTags,
+    proposed_tags: cleanProposedTags,
+    proposed_replacements: cleanProposedReplacements,
     github_url: normalizedUrl ?? null,
     website_url: normalizedWebsiteUrl ?? null,
     discussion_url: normalizedDiscussionUrl ?? null,
@@ -291,9 +312,9 @@ export async function POST(request: NextRequest) {
     replacements: replacementValidation.replacements,
     hasTagAssociations: canonicalTags.length > 0,
     insertProject: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("projects")
-        .insert(insertPayload)
+        .insert(insertPayload as any)
         .select("id, slug")
         .single();
       return { project: data, error: error?.message ?? null };

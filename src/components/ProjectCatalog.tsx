@@ -1,11 +1,13 @@
-"use client";
 
+
+"use client";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Project, ProjectCategory } from "@/types/project";
 import { matchesProjectCategory, matchesProjectQuery } from "@/lib/projects";
 import type { DiscoverTag } from "@/lib/discover-tags";
 import { buildPublicCategoryOptions } from "@/lib/category-catalog";
-import { ProjectCard } from "./ProjectCard";
+import dynamic from 'next/dynamic';
+const ProjectCard = dynamic(() => import('./ProjectCard').then(mod => mod.ProjectCard), { ssr: false });
 import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
 interface ProjectCatalogProps {
@@ -47,9 +49,9 @@ export function ProjectCatalog({
   }, [initialProjects, searchQuery, selectedCategory, selectedTag]);
 
   // Reset to first page when any search or filter criteria changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedTag]);
+
+
+
 
   const totalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -69,39 +71,25 @@ export function ProjectCatalog({
   return (
     <section id="catalog" className="relative mx-auto max-w-[1500px] px-4 pb-16 pt-8 sm:px-6 lg:px-8">
       <div className="mb-8 rounded-[30px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:p-6">
-        {dataSource === "database" && (
-          <div className="mb-6 rounded-2xl border border-emerald-500/20 bg-[var(--success)] p-4 text-sm text-emerald-900">
-            <div className="flex items-start gap-3">
-              <span className="text-lg" aria-hidden="true">✓</span>
-              <div>
-                <p className="font-semibold">Live Database Connected</p>
-                <p className="mt-1 text-xs text-emerald-800/80">
-                  Displaying {initialProjects.length} approved projects from Supabase.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {dataSource === "error" && (
-          <div className="mb-6 rounded-2xl border border-rose-500/20 bg-[var(--danger)] p-4 text-sm text-rose-900">
+          <div className="mb-6 rounded-2xl border border-rose-500/20 bg-[var(--danger)] p-4 text-sm text-rose-300">
             <div className="flex items-start gap-3">
               <span className="text-lg" aria-hidden="true">⚠</span>
               <div>
-                <p className="font-semibold">Database Connection Issue</p>
-                <p className="mt-1 text-xs text-rose-800/80">{errorMessage || "Failed to load projects from Supabase."}</p>
+                <p className="font-semibold text-rose-200">Database Connection Issue</p>
+                <p className="mt-1 text-xs text-rose-300/80">{errorMessage || "Failed to load projects from Supabase."}</p>
               </div>
             </div>
           </div>
         )}
 
         {dataSource === "demo" && (
-          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-[var(--warning)] p-4 text-sm text-amber-900">
+          <div className="mb-6 rounded-2xl border border-amber-500/20 bg-[var(--warning)] p-4 text-sm text-amber-300">
             <div className="flex items-start gap-3">
               <span className="text-lg" aria-hidden="true">ℹ</span>
               <div>
-                <p className="font-semibold">Demo Data Mode</p>
-                <p className="mt-1 text-xs text-amber-800/80">
+                <p className="font-semibold text-amber-200">Demo Data Mode</p>
+                <p className="mt-1 text-xs text-amber-300/80">
                   Sample catalog preview. Add Supabase keys to switch to the live directory.
                 </p>
               </div>
@@ -129,7 +117,7 @@ export function ProjectCatalog({
                 id="search-input"
                 type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 placeholder="Search projects, tags, or replacement apps..."
                 className="w-full rounded-full border border-[var(--border)] bg-[var(--surface-strong)] py-3 pl-11 pr-10 text-sm text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-colors focus:border-[var(--border-strong)]"
               />
@@ -161,7 +149,7 @@ export function ProjectCatalog({
               <button
                 key={category}
                 type="button"
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => { setSelectedCategory(category); setCurrentPage(1); }}
                 aria-pressed={isSelected}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                   isSelected

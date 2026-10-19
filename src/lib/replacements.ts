@@ -11,9 +11,15 @@ export interface ReplacementInput {
   level: ReplacementLevel;
 }
 
+export interface ProposedReplacementInput {
+  name: string;
+  level: ReplacementLevel;
+}
+
 export interface ReplacementValidationResult {
   valid: boolean;
   replacements: ReplacementInput[];
+  proposedReplacements?: ProposedReplacementInput[];
   error?: string;
 }
 
@@ -48,6 +54,47 @@ export function validateReplacementInput(value: unknown): ReplacementValidationR
   }
 
   return { valid: true, replacements };
+}
+
+export function validateProposedReplacementsInput(value: unknown): {
+  valid: boolean;
+  proposed: ProposedReplacementInput[];
+  error?: string;
+} {
+  if (value === undefined || value === null) {
+    return { valid: true, proposed: [] };
+  }
+  if (!Array.isArray(value)) {
+    return { valid: false, proposed: [], error: "Proposed replacement applications must be a list." };
+  }
+  if (value.length > 10) {
+    return { valid: false, proposed: [], error: "Propose no more than 10 applications." };
+  }
+
+  const proposed: ProposedReplacementInput[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      return { valid: false, proposed: [], error: "Each proposed replacement must specify an application name." };
+    }
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const level = record.level;
+    if (!name || name.length < 2 || name.length > 80) {
+      return { valid: false, proposed: [], error: "Proposed application name must be between 2 and 80 characters." };
+    }
+    if (typeof level !== "string" || !REPLACEMENT_LEVELS.includes(level as ReplacementLevel)) {
+      return { valid: false, proposed: [], error: "Choose a valid replacement level for proposed application." };
+    }
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) {
+      return { valid: false, proposed: [], error: "An application can only be proposed once." };
+    }
+    seen.add(lower);
+    proposed.push({ name, level: level as ReplacementLevel });
+  }
+
+  return { valid: true, proposed };
 }
 
 export function matchesReplacementApplication(

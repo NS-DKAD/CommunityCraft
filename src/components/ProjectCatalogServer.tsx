@@ -1,4 +1,5 @@
 import React from "react";
+export const revalidate = 60; // ISR: cache catalog for 60 seconds
 import { getProjects } from "@/lib/projects";
 import { buildDiscoverTagOptions, type DiscoverTagRecord } from "@/lib/discover-tags";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";

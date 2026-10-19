@@ -1,5 +1,7 @@
+
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Project } from "@/types/project";
 import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
@@ -8,11 +10,24 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
+  const [isNavigating, setIsNavigating] = useState(false);
   const categoryColor = categoryChipColor(project.category, project.categoryColor);
   const projectHref = project.slug ? `/projects/${project.slug}` : `/projects/${project.id}`;
+  const pathname = usePathname();
+
+  // Reset navigation animation when route changes
+  
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsNavigating(false);
+  }, [pathname]);
 
   return (
-    <article className="group relative isolate overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_60px_rgba(15,23,42,0.06)] transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] focus-within:-translate-y-0.5 focus-within:shadow-[0_24px_80px_rgba(15,23,42,0.10)] md:hover:-translate-y-1.5 md:hover:shadow-[0_30px_90px_rgba(15,23,42,0.12)]">
+    <article
+      className={`group relative isolate overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_60px_rgba(15,23,42,0.06)] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] focus-within:-translate-y-0.5 focus-within:shadow-[0_24px_80px_rgba(15,23,42,0.10)] md:hover:-translate-y-1.5 md:hover:shadow-[0_30px_90px_rgba(15,23,42,0.12)] ${
+        isNavigating ? "animate-pulse ring-2 ring-emerald-500/50 scale-[0.99] opacity-80" : ""
+      }`}
+    >
       <div className="relative p-4 sm:p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -29,6 +44,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
             <Link
               href={projectHref}
+              onClick={() => setIsNavigating(true)}
               className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--text)]/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
               aria-label={`Open ${project.name} details`}
             >

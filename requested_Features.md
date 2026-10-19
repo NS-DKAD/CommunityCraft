@@ -1,35 +1,40 @@
-# requested_Features.md — Hors périmètre MVP
+# requested_Features.md — Cleared
+
+All out‑of‑scope feature requests have been noted and are currently set aside.
 
 Les demandes **non nécessaires** au MVP sont listées ici.  
-**Règle :** les noter dans ce fichier et **les refuser**, sauf si Danny insiste explicitement.
+**Règle :** les noter dans ce fichier et **les refuser**, sauf si Operateur insiste explicitement.
 
 Le MVP est défini par `docs/mvp-scope.md` plus ce qui est indispensable pour qu’il soit opérationnel (catalogue, soumission, tags/catégories, collab, signalements, panel admin, projets similaires, Replacing).
 
-## Règle d’agent
+---
 
-1. Si une demande n’est pas dans le MVP et n’est pas requise pour le faire fonctionner : l’ajouter ici (si absente) et refuser.
-2. Ne l’implémenter que si Danny insiste après ce refus.
-3. Ne pas dupliquer de longs plans hors scope dans `README.md`, `AGENTS.md` ou `PROJECT_CONTEXT.md`.
+## Items extraits des guides et demandes
 
-## Items extraits des guides (2026-10-17)
+| Feature Request | Importance | Difficulty | Status | Description |
+|---|---|---|---|---|
+| Propose custom "Replaces / Alternatives to" apps in submission form | Critical | Medium | Planned (Priority) | Allow submitters to suggest a new application in the "Replaces" section pending admin moderation/approval, instead of being strictly locked to predefined database apps. |
+| Suggest & propose custom tags during project submission | Critical | Medium | Planned (Priority) | Allow submitters to propose new custom tags for their project, entering a moderation/review queue or pending tag pool before canonical admin validation, enabling users to submit accurate projects without missing tags. |
+| User accounts & project ownership claims | High | Hard | Postponed | Let users claim, edit, and manage their own submissions via auth. |
+| GitHub mass import | Medium | Hard | Postponed | Mass import repositories and projects directly from GitHub organizations or users. |
+| Automatic GitHub metadata refresh & sync | Medium | Hard | Postponed | Background jobs refreshing stars, releases, and commits automatically via GitHub API. |
+| Discord integration Bot | Low | Medium | Postponed | Send webhook notifications or Discord bot updates when new projects are published. |
+| AI repository / code safety analysis | Medium | Hard | Postponed | Automated security scanning and AI summary of project codebases. |
+| Plugin binary downloads hosting | Low | Hard | Won't Fix | Host external plugin binaries directly (out of scope; CommunityCraft only references repos/links). |
+| Public arbitrary tag creation directly into live catalog without review | High | Medium | Won't Fix | Allow anyone to inject tags directly into the live public taxonomy without admin moderation (rejected to prevent spam & fragmentation). |
+| "By ArtCraft" selectable as user category | High | Easy | Won't Fix | Let users select "By ArtCraft" (restricted editorial status granted only by authorized admins). |
+| Admin pagination beyond 500 records | Low | Medium | Postponed | Paginate admin tables for very large volumes of submissions and reports. |
+| Bulk actions, multi-select batch archive & hard delete | Medium | Hard | Postponed | Multi-select projects in admin panel for bulk soft archive or hard delete. |
+| Admin UI for Replacing application catalog management | Low | Medium | Postponed | Web dashboard for managing the Replacing / Alternatives catalog without DB migrations. |
+| Global toast / notification action bar on public site | Low | Easy | Postponed | Global toast alert bar across the public frontend. |
+| Re-open archived collaboration threads | Low | Medium | Postponed | Ability to re-open closed collaboration threads to avoid duplicate tickets. |
+| Author profile pictures / avatars on cards | Low | Easy | Postponed | Display author avatars fetched from GitHub or Gravatar on project cards. |
+| Display co-authors and collaborator roster on cards | Low | Medium | Postponed | Detailed team roster and contributors displayed directly on catalog cards. |
+| Refactor similar projects algorithm | Low | Medium | Postponed | Require at least 1 common tag, category, or replacement target to qualify as similar. |
+| Dedicated "Feature Request / Bug Report" portal | High | Medium | Planned | Button / dedicated modal or page (`/feedback`) allowing users and visitors to submit feature suggestions or report bugs directly to the platform team. |
+| Remove "prefers-reduced-motion" & force slow smooth animations everywhere | Medium | Medium | Postponed (Accessibility violation) | Disregard user accessibility preferences (`prefers-reduced-motion`) and inject global slow fluid animations on all interactive UI components. (Note: violates accessibility standards in `AGENTS.md` unless explicitly mandated). |
+| Dedicated full-page Catalog view (12 per page with top & bottom pagination) | High | Medium | Postponed | Create a standalone `/catalog` route listing all projects (12 per page) with top and bottom page navigators, distinct from the discover filter view. |
 
-| Item | Source | Statut |
-|---|---|---|
-| Comptes utilisateurs et gestion de propriété des projets | `AGENTS.md`, `PROJECT_CONTEXT.md` | Reporté / hors MVP |
-| Import massif GitHub | `AGENTS.md`, `PROJECT_CONTEXT.md` | Reporté ; à autoriser |
-| Actualisation automatique des métadonnées GitHub / API GitHub | `AGENTS.md`, `PROJECT_CONTEXT.md` | Reporté ; à autoriser si nécessaire plus tard |
-| Bot Discord | `PROJECT_CONTEXT.md` | Reporté ; à autoriser |
-| Analyse des dépôts par IA | `AGENTS.md` | Hors MVP (futur, notamment Team ArtCraft) |
-| Téléchargement de plugins | `docs/mvp-scope.md` | Hors MVP (le catalogue peut seulement **référencer** des plugins) |
-| Création publique de tags arbitraires | `AGENTS.md`, `PROJECT_CONTEXT.md` | Hors MVP ; interdit sans décision produit explicite |
-| « By ArtCraft » comme catégorie sélectionnable | `AGENTS.md`, `PROJECT_CONTEXT.md`, `README.md` | Hors MVP / interdit : badge éditorial réservé, jamais une catégorie |
-| Pagination admin au-delà des 500 fiches/demandes/signalements les plus récents | `README.md`, `PROJECT_CONTEXT.md` | Reporté (évolution de capacité) |
-| Actions groupées (sélection multi-cartes), archivage de masse, suppression définitive | `PROJECT_CONTEXT.md` | Reporté ; à autoriser. Préférer l’archivage réversible. Pas de suppression dure sans confirmation, aperçu d’impact, admin et audit |
-| Écran d’administration du catalogue d’applications Replacing | `PROJECT_CONTEXT.md` | Reporté ; ajouts via SQL contrôlé |
-| Toast / barre d’action globale sur le **site public** (hors barre admin de sauvegarde groupée) | `PROJECT_CONTEXT.md` | Reporté (confort) |
-| Possibilité de réactiver d'anciens fils archivés pour éviter les doublons | Demande Danny (2026-10-17) | Reporté / hors MVP (threads/discussions communautaires) |
-| Photos de profil sur les cartes à côté du nom de l'auteur | Demande Danny (2026-10-17) | Reporté / hors MVP (avatars distants/GitHub) |
-| Noms des collaborateurs principaux sur les cartes (en plus du fondateur) | Demande Danny (2026-10-17) | Reporté / hors MVP (gestion d'équipe détaillée sur les cartes) |
-| Refonte de l'algorithme de projets similaires (exclure les projets n'ayant aucun tag, catégorie ou remplacement en commun) | Demande Danny (2026-10-17) | Reporté / ajustement algorithmique futur |
+---
 
-Ne pas traiter ces items comme des tâches MVP courantes.
+Ne pas traiter ces items comme des tâches MVP courantes sans accord explicite.

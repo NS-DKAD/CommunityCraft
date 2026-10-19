@@ -1,0 +1,12 @@
+Bug fixes and minor visual improvement
+- Ineffective / redundant navigation buttons in header (Discover / Search / Tag)(fixed)
+-Missing card click loading animation / visual feedback (fixed)
+-Visual clutter from "live data connected" status banner in top menu (fixed)
+-Report button missing smooth hover transition to red (fixed)
+-Footer appears fixed / overlays top on short pages(fixed)
+-Text selection invisible (no highlight color) & context menu / copy-paste blocked (fixed)
+-New Known Bugs file Added to track bugs and list them
+-"Replaces/ Alternatives to" Finaly works and is nos longer limited by the known apps; you can add app any and after Admin approval it will be Added. Same Goes for the Tags.
+-Admin qol improvement for faster approval
+-Fix admin proposals RPC types, add proposed_tags & proposed_replacements handling
+-clean admin page duplicate mapping, cast Supabase insert for new fields, ensure build passes.

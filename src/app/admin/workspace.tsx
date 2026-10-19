@@ -27,6 +27,8 @@ export type AdminProject = {
   created_at: string;
   updated_at: string;
   replacing: Array<{ name: string; level: string }>;
+  proposed_tags?: string[];
+  proposed_replacements?: Array<{ name: string; level: string }>;
 };
 
 type ProjectDraftFields = {
@@ -557,6 +559,15 @@ function ProjectReview({ project, categories, fields, error, saving, onDraftChan
   onDraftChange: (fields: ProjectDraftFields) => void;
   onSave: (status: AdminProject["moderation_status"]) => void;
 }) {
+  const [localTags, setLocalTags] = useState<string[]>(project.tags ?? []);
+  const [localProposedTags, setLocalProposedTags] = useState<string[]>(project.proposed_tags ?? []);
+  const [localReplacing, setLocalReplacing] = useState<Array<{ name: string; level: string }>>(project.replacing ?? []);
+  const [localProposedReplacements, setLocalProposedReplacements] = useState<Array<{ name: string; level: string }>>(project.proposed_replacements ?? []);
+  const [proposalActionError, setProposalActionError] = useState("");
+  const [pendingActionItem, setPendingActionItem] = useState<string | null>(null);
+
+
+
   const githubUrl = safeExternalUrl(project.github_url);
   const categoryOptions: Array<{ name: string; display_name: string | null; is_active: boolean; color: string | null }> = categories.length > 0
     ? categories.map(({ name, display_name, is_active, color }) => ({ name, display_name, is_active, color }))
@@ -565,6 +576,112 @@ function ProjectReview({ project, categories, fields, error, saving, onDraftChan
     categoryOptions.unshift({ name: project.category, display_name: null, is_active: false, color: null });
   }
   const categoryColor = categoryOptions.find((category) => category.name === fields.category)?.color;
+
+  async function handleApproveTag(tag: string) {
+    setProposalActionError("");
+    setPendingActionItem(`tag-approve-${tag}`);
+    const slug = tag.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+
+    // Optimistic UI update
+    setLocalProposedTags((prev) => prev.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+    setLocalTags((prev) => [...prev, tag]);
+
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve_tag", tagName: tag, tagSlug: slug }),
+      });
+      if (!res.ok) {
+        throw new Error("Could not approve tag on server.");
+      }
+    } catch {
+      // Rollback
+      setLocalProposedTags((prev) => [...prev, tag]);
+      setLocalTags((prev) => prev.filter((t) => t !== tag));
+      setProposalActionError(`Failed to approve tag #${tag}. Please try again.`);
+    } finally {
+      setPendingActionItem(null);
+    }
+  }
+
+  async function handleDismissTag(tag: string) {
+    setProposalActionError("");
+    setPendingActionItem(`tag-dismiss-${tag}`);
+
+    // Optimistic UI update
+    setLocalProposedTags((prev) => prev.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss_tag", tagName: tag }),
+      });
+      if (!res.ok) {
+        throw new Error("Could not dismiss tag on server.");
+      }
+    } catch {
+      // Rollback
+      setLocalProposedTags((prev) => [...prev, tag]);
+      setProposalActionError(`Failed to dismiss tag #${tag}. Please try again.`);
+    } finally {
+      setPendingActionItem(null);
+    }
+  }
+
+  async function handleApproveApp(item: { name: string; level: string }) {
+    setProposalActionError("");
+    setPendingActionItem(`app-approve-${item.name}`);
+    const slug = item.name.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+
+    // Optimistic UI update
+    setLocalProposedReplacements((prev) => prev.filter((app) => app.name.toLowerCase() !== item.name.toLowerCase()));
+    setLocalReplacing((prev) => [...prev, item]);
+
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve_application", appName: item.name, appSlug: slug, level: item.level }),
+      });
+      if (!res.ok) {
+        throw new Error("Could not approve application on server.");
+      }
+    } catch {
+      // Rollback
+      setLocalProposedReplacements((prev) => [...prev, item]);
+      setLocalReplacing((prev) => prev.filter((app) => app.name !== item.name));
+      setProposalActionError(`Failed to approve application ${item.name}. Please try again.`);
+    } finally {
+      setPendingActionItem(null);
+    }
+  }
+
+  async function handleDismissApp(item: { name: string; level: string }) {
+    setProposalActionError("");
+    setPendingActionItem(`app-dismiss-${item.name}`);
+
+    // Optimistic UI update
+    setLocalProposedReplacements((prev) => prev.filter((app) => app.name.toLowerCase() !== item.name.toLowerCase()));
+
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}/proposals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "dismiss_application", appName: item.name }),
+      });
+      if (!res.ok) {
+        throw new Error("Could not dismiss application on server.");
+      }
+    } catch {
+      // Rollback
+      setLocalProposedReplacements((prev) => [...prev, item]);
+      setProposalActionError(`Failed to dismiss application ${item.name}. Please try again.`);
+    } finally {
+      setPendingActionItem(null);
+    }
+  }
 
   function set<K extends keyof ProjectDraftFields>(key: K, value: ProjectDraftFields[K]) { onDraftChange({ ...fields, [key]: value }); }
   const inputClass = "mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm text-[var(--text)]";
@@ -577,8 +694,88 @@ function ProjectReview({ project, categories, fields, error, saving, onDraftChan
       <label className="block text-xs text-[var(--text-muted)]">Goal<input disabled={saving} className={inputClass} value={fields.goal} onChange={(event) => set("goal", event.target.value)} /></label>
       <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs text-[var(--text-muted)]">GitHub repository<input disabled={saving} className={inputClass} value={fields.githubUrl} onChange={(event) => set("githubUrl", event.target.value)} /></label><label className="text-xs text-[var(--text-muted)]">Website<input disabled={saving} className={inputClass} value={fields.websiteUrl} onChange={(event) => set("websiteUrl", event.target.value)} /></label></div>
       <label className="block text-xs text-[var(--text-muted)]">Discussion link<input disabled={saving} className={inputClass} value={fields.discussionUrl} onChange={(event) => set("discussionUrl", event.target.value)} /></label>
-      <div className="rounded-xl border border-[var(--border)] p-3"><p className="text-xs font-semibold text-[var(--text-soft)]">Tags (read only in this panel)</p><p className="mt-1 text-sm text-[var(--text-muted)]">{project.tags?.length ? project.tags.map((tag) => `#${tag}`).join(" ") : "No tags"}</p></div>
-      <div className="rounded-xl border border-[var(--border)] p-3"><p className="text-xs font-semibold text-[var(--text-soft)]">Replacing (read only)</p><p className="mt-1 text-sm text-[var(--text-muted)]">{project.replacing?.length ? project.replacing.map((item) => `${item.name} · ${item.level}`).join("; ") : "No replacement applications recorded"}</p></div>
+      
+      {proposalActionError && (
+        <p role="alert" className="rounded-lg bg-rose-500/10 p-2.5 text-xs text-rose-300">
+          {proposalActionError}
+        </p>
+      )}
+
+      <div className="rounded-xl border border-[var(--border)] p-3">
+        <p className="text-xs font-semibold text-[var(--text-soft)]">Tags (canonical)</p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">{localTags.length ? localTags.map((tag) => `#${tag}`).join(" ") : "No tags"}</p>
+        {localProposedTags.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-2">
+            <p className="text-xs font-semibold text-amber-300">Proposed by submitter (pending approval):</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {localProposedTags.map((tag) => (
+                <div
+                  key={tag}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200"
+                >
+                  <span>#{tag}</span>
+                  <div className="flex items-center gap-1 border-l border-amber-500/30 pl-2">
+                    <button
+                      type="button"
+                      disabled={saving || pendingActionItem === `tag-approve-${tag}`}
+                      onClick={() => handleApproveTag(tag)}
+                      className="font-semibold text-emerald-400 hover:text-emerald-300 hover:underline disabled:opacity-50"
+                      title="Approve and add to canonical catalog"
+                    >
+                      {pendingActionItem === `tag-approve-${tag}` ? "…" : "✓ Approve"}
+                    </button>
+                    <span className="text-amber-500/40">·</span>
+                    <button
+                      type="button"
+                      disabled={saving || pendingActionItem === `tag-dismiss-${tag}`}
+                      onClick={() => handleDismissTag(tag)}
+                      className="text-rose-400 hover:text-rose-300 hover:underline disabled:opacity-50"
+                      title="Dismiss proposal without rejecting project"
+                    >
+                      {pendingActionItem === `tag-dismiss-${tag}` ? "…" : "✕ Dismiss"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] p-3">
+        <p className="text-xs font-semibold text-[var(--text-soft)]">Replacing (canonical)</p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">{localReplacing.length ? localReplacing.map((item) => `${item.name} · ${item.level}`).join("; ") : "No replacement applications recorded"}</p>
+        {localProposedReplacements.length > 0 && (
+          <div className="mt-3 border-t border-[var(--border)] pt-2">
+            <p className="text-xs font-semibold text-amber-300">Proposed applications by submitter:</p>
+            <div className="mt-2 space-y-1.5">
+              {localProposedReplacements.map((item) => (
+                <div key={item.name} className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-200">
+                  <span>{item.name} <span className="text-[11px] text-amber-300/80">({item.level})</span></span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={saving || pendingActionItem === `app-approve-${item.name}`}
+                      onClick={() => handleApproveApp(item)}
+                      className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-50"
+                    >
+                      {pendingActionItem === `app-approve-${item.name}` ? "Approving…" : "✓ Approve app"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving || pendingActionItem === `app-dismiss-${item.name}`}
+                      onClick={() => handleDismissApp(item)}
+                      className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+                    >
+                      {pendingActionItem === `app-dismiss-${item.name}` ? "Dismissing…" : "✕ Dismiss"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       {error && <p role="alert" className="rounded-lg bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
       <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-4"><button type="submit" disabled={saving} className="rounded-lg bg-[var(--text)] px-4 py-2 text-sm font-semibold text-[var(--bg)] disabled:opacity-60">Save changes</button><button type="button" disabled={saving} onClick={() => onSave("approved")} className="rounded-lg border border-emerald-500/40 px-4 py-2 text-sm text-emerald-300 disabled:opacity-60">Save & publish</button><button type="button" disabled={saving} onClick={() => onSave("rejected")} className="rounded-lg border border-rose-500/40 px-4 py-2 text-sm text-rose-300 disabled:opacity-60">Save & reject</button><button type="button" disabled={saving} onClick={() => onSave("pending")} className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm disabled:opacity-60">Save as pending</button></div>
     </form>

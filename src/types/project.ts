@@ -30,6 +30,11 @@ export interface ProjectReplacement {
   level: ReplacementLevel;
 }
 
+export interface ProposedReplacement {
+  name: string;
+  level: ReplacementLevel;
+}
+
 export interface Project {
   id: string;
   slug?: string;
@@ -53,4 +58,6 @@ export interface Project {
   discussionUrl?: string | null;
   websiteUrl?: string | null;
   replacing?: ProjectReplacement[];
+  proposed_tags?: string[];
+  proposed_replacements?: ProposedReplacement[];
 }
