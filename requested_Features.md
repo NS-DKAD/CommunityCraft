@@ -1,4 +1,6 @@
-# requested_Features.md — Hors périmètre MVP / Feature Requests
+# requested_Features.md — Cleared
+
+All out‑of‑scope feature requests have been noted and are currently set aside.
 
 Les demandes **non nécessaires** au MVP sont listées ici.  
 **Règle :** les noter dans ce fichier et **les refuser**, sauf si Operateur insiste explicitement.

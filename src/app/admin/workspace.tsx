@@ -566,15 +566,7 @@ function ProjectReview({ project, categories, fields, error, saving, onDraftChan
   const [proposalActionError, setProposalActionError] = useState("");
   const [pendingActionItem, setPendingActionItem] = useState<string | null>(null);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    setLocalTags(project.tags ?? []);
-    setLocalProposedTags(project.proposed_tags ?? []);
-    setLocalReplacing(project.replacing ?? []);
-    setLocalProposedReplacements(project.proposed_replacements ?? []);
-    setProposalActionError("");
-    setPendingActionItem(null);
-  }, [project.id, project.tags, project.proposed_tags, project.replacing, project.proposed_replacements]);
+
 
   const githubUrl = safeExternalUrl(project.github_url);
   const categoryOptions: Array<{ name: string; display_name: string | null; is_active: boolean; color: string | null }> = categories.length > 0

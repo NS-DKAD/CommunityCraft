@@ -58,4 +58,6 @@ export interface Project {
   discussionUrl?: string | null;
   websiteUrl?: string | null;
   replacing?: ProjectReplacement[];
+  proposed_tags?: string[];
+  proposed_replacements?: ProposedReplacement[];
 }

@@ -36,7 +36,7 @@ export async function POST(
       return NextResponse.json({ error: "Tag name and slug are required." }, { status: 400 });
     }
 
-    const { error } = await auth.supabase.rpc("admin_approve_proposed_tag", {
+    const { error } = await (auth.supabase as any).rpc('admin_approve_proposed_tag', {
       p_project_id: id,
       p_tag_name: tagName,
       p_tag_slug: tagSlug,
@@ -59,7 +59,7 @@ export async function POST(
       return NextResponse.json({ error: "Application name and slug are required." }, { status: 400 });
     }
 
-    const { error } = await auth.supabase.rpc("admin_approve_proposed_application", {
+    const { error } = await (auth.supabase as any).rpc('admin_approve_proposed_application', {
       p_project_id: id,
       p_app_name: appName,
       p_app_slug: appSlug,
@@ -81,11 +81,7 @@ export async function POST(
     }
 
     // Retrieve current proposed_tags and remove the dismissed tag
-    const { data: projectRow, error: fetchError } = await auth.supabase
-      .from("projects")
-      .select("proposed_tags")
-      .eq("id", id)
-      .maybeSingle();
+    const { data: projectRow, error: fetchError } = await (auth.supabase as any).from("projects").select("proposed_tags").eq("id", id).maybeSingle();
 
     if (fetchError || !projectRow) {
       return NextResponse.json({ error: "Could not locate project." }, { status: 404 });
@@ -94,9 +90,9 @@ export async function POST(
     const currentTags = Array.isArray(projectRow.proposed_tags) ? (projectRow.proposed_tags as string[]) : [];
     const updatedTags = currentTags.filter((t) => t.toLowerCase() !== tagName.toLowerCase());
 
-    const { error: updateError } = await auth.supabase
+    const { error: updateError } = await (auth.supabase as any)
       .from("projects")
-      .update({ proposed_tags: updatedTags })
+      .update({ proposed_tags: updatedTags } as any)
       .eq("id", id);
 
     if (updateError) {
@@ -114,11 +110,7 @@ export async function POST(
     }
 
     // Retrieve current proposed_replacements and remove the dismissed application
-    const { data: projectRow, error: fetchError } = await auth.supabase
-      .from("projects")
-      .select("proposed_replacements")
-      .eq("id", id)
-      .maybeSingle();
+    const { data: projectRow, error: fetchError } = await (auth.supabase as any).from("projects").select("proposed_replacements").eq("id", id).maybeSingle();
 
     if (fetchError || !projectRow) {
       return NextResponse.json({ error: "Could not locate project." }, { status: 404 });
@@ -129,9 +121,9 @@ export async function POST(
       : [];
     const updatedApps = currentApps.filter((item) => String(item.name ?? "").toLowerCase() !== appName.toLowerCase());
 
-    const { error: updateError } = await auth.supabase
+    const { error: updateError } = await (auth.supabase as any)
       .from("projects")
-      .update({ proposed_replacements: updatedApps })
+      .update({ proposed_replacements: updatedApps } as any)
       .eq("id", id);
 
     if (updateError) {

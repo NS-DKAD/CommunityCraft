@@ -6,7 +6,8 @@ import { Project, ProjectCategory } from "@/types/project";
 import { matchesProjectCategory, matchesProjectQuery } from "@/lib/projects";
 import type { DiscoverTag } from "@/lib/discover-tags";
 import { buildPublicCategoryOptions } from "@/lib/category-catalog";
-import { ProjectCard } from "./ProjectCard";
+import dynamic from 'next/dynamic';
+const ProjectCard = dynamic(() => import('./ProjectCard').then(mod => mod.ProjectCard), { ssr: false });
 import { categoryChipColor, getTintedChipStyle } from "@/lib/chip-style";
 
 interface ProjectCatalogProps {
@@ -49,10 +50,8 @@ export function ProjectCatalog({
 
   // Reset to first page when any search or filter criteria changes
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCategory, selectedTag]);
+
+
 
   const totalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -118,7 +117,7 @@ export function ProjectCatalog({
                 id="search-input"
                 type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 placeholder="Search projects, tags, or replacement apps..."
                 className="w-full rounded-full border border-[var(--border)] bg-[var(--surface-strong)] py-3 pl-11 pr-10 text-sm text-[var(--text)] placeholder-[var(--text-muted)] outline-none transition-colors focus:border-[var(--border-strong)]"
               />
@@ -150,7 +149,7 @@ export function ProjectCatalog({
               <button
                 key={category}
                 type="button"
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => { setSelectedCategory(category); setCurrentPage(1); }}
                 aria-pressed={isSelected}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                   isSelected

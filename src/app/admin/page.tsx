@@ -60,8 +60,8 @@ async function AdminContent() {
     ...project,
     tags: [],
     replacing: [],
-    proposed_tags: Array.isArray(project.proposed_tags) ? project.proposed_tags : [],
-    proposed_replacements: Array.isArray(project.proposed_replacements) ? project.proposed_replacements : [],
+    proposed_tags: Array.isArray((project as any).proposed_tags) ? (project as any).proposed_tags : [],
+    proposed_replacements: Array.isArray((project as any).proposed_replacements) ? (project as any).proposed_replacements : [],
   })) as AdminProject[];
   let tagsError: string | null = null;
   let replacementsError: string | null = null;

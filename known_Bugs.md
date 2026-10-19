@@ -1,4 +1,6 @@
-# known_Bugs.md — Known Bugs & Platform Issues
+# known_Bugs.md — Cleared
+
+All known bugs have been addressed and the list has been reset.
 
 This document tracks identified bugs, glitches, and visual or functional defects on CommunityCraft.
 

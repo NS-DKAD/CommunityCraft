@@ -312,9 +312,9 @@ export async function POST(request: NextRequest) {
     replacements: replacementValidation.replacements,
     hasTagAssociations: canonicalTags.length > 0,
     insertProject: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("projects")
-        .insert(insertPayload)
+        .insert(insertPayload as any)
         .select("id, slug")
         .single();
       return { project: data, error: error?.message ?? null };
