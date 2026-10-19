@@ -30,5 +30,6 @@ Le MVP est défini par `docs/mvp-scope.md` plus ce qui est indispensable pour qu
 | Possibilité de réactiver d'anciens fils archivés pour éviter les doublons | Demande Danny (2026-10-17) | Reporté / hors MVP (threads/discussions communautaires) |
 | Photos de profil sur les cartes à côté du nom de l'auteur | Demande Danny (2026-10-17) | Reporté / hors MVP (avatars distants/GitHub) |
 | Noms des collaborateurs principaux sur les cartes (en plus du fondateur) | Demande Danny (2026-10-17) | Reporté / hors MVP (gestion d'équipe détaillée sur les cartes) |
+| Refonte de l'algorithme de projets similaires (exclure les projets n'ayant aucun tag, catégorie ou remplacement en commun) | Demande Danny (2026-10-17) | Reporté / ajustement algorithmique futur |
 
 Ne pas traiter ces items comme des tâches MVP courantes.
